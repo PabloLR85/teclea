@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, type TestRow } from "@/lib/db";
 import { endStudentSession, requireStudent, startStudentSession } from "@/lib/session";
-import { checkEvents, computeGrade, computeScore, normalizeBaremo, type InputEvent } from "@/lib/scoring";
+import { checkEvents, computeGrade, computeScore, MAX_EXTRA, normalizeBaremo, type InputEvent } from "@/lib/scoring";
 import { findLesson, isUnlocked, PASS_ACCURACY } from "@/lib/lessons";
 
 const MAX_FAILED_LOGINS = 10;
@@ -88,7 +88,7 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
   if (!isUnlocked(lessonId, completedSet)) return { ok: false, error: "Esta lección todavía está bloqueada." };
 
   const target = found.lesson.text;
-  const p = sanitize(payload, target.length);
+  const p = sanitize(payload, target.length + MAX_EXTRA);
   if (!p) return { ok: false, error: "Datos del ejercicio no válidos." };
 
   const baremo = normalizeBaremo(klass.baremo);
@@ -110,7 +110,7 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
     flag_reason: flagged,
   });
 
-  const fullText = p.typed.length === target.length;
+  const fullText = s.consumed === target.length;
   const completed = !flagged && fullText && s.accuracy >= PASS_ACCURACY;
   if (!flagged && fullText) {
     const prev = (progress ?? []).find((x) => x.lesson_id === lessonId);
@@ -127,7 +127,7 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
   }
   await db().from("students").update({ last_seen_at: new Date().toISOString() }).eq("id", student.id);
   revalidatePath("/practicar");
-  return { ok: true, ...s, flagged, completed };
+  return { ok: true, chars: s.chars, errors: s.errors, netPpm: s.netPpm, grossPpm: s.grossPpm, accuracy: s.accuracy, flagged, completed };
 }
 
 async function loadTest(testId: string, classId: string): Promise<TestRow | null> {
@@ -185,7 +185,7 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
     .maybeSingle();
   if (!session) return { ok: false, error: "La prueba no se había iniciado." };
 
-  const p = sanitize(payload, test.content.length);
+  const p = sanitize(payload, test.content.length + MAX_EXTRA);
   if (!p) return { ok: false, error: "Datos de la prueba no válidos." };
 
   // El tiempo que cuenta lo pone el servidor: desde que empezo hasta ahora, con un margen de red.
@@ -214,5 +214,5 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
   });
   if (error) return { ok: false, error: "Esta prueba ya estaba entregada." };
   revalidatePath("/pruebas");
-  return { ok: true, ...s, flagged, grade: computeGrade(s.netPpm, s.accuracy, baremo) };
+  return { ok: true, chars: s.chars, errors: s.errors, netPpm: s.netPpm, grossPpm: s.grossPpm, accuracy: s.accuracy, flagged, grade: computeGrade(s.netPpm, s.accuracy, baremo) };
 }
