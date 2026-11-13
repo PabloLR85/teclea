@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Keyboard } from "./Keyboard";
 import type { SubmitResult } from "@/app/actions/alumno";
-import type { InputEvent } from "@/lib/scoring";
+import { align, MAX_EXTRA, ST_MISSING, ST_OK, ST_WRONG, type InputEvent } from "@/lib/scoring";
 
 type Props = {
   target: string;
@@ -31,6 +31,8 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
   const events = useRef<InputEvent[]>([]);
   const finishedRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const textBoxRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLSpanElement>(null);
   const clockStart = useRef<number | null>(mode === "prueba" ? Date.now() : null);
 
   // En prueba el reloj corre desde que se pulsa Empezar, no desde la primera tecla.
@@ -70,7 +72,7 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
 
   function onChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     if (finishedRef.current) return;
-    const value = e.target.value.replace(/\n/g, "").slice(0, target.length);
+    const value = e.target.value.replace(/\n/g, "").slice(0, target.length + MAX_EXTRA);
     let start = startedAt;
     if (!start) {
       start = Date.now();
@@ -78,7 +80,11 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
     }
     events.current.push({ t: Date.now() - start, n: value.length });
     setTyped(value);
-    if (value.length === target.length) void finish(value);
+    // Termina cuando lo escrito llega al final del original (aunque se haya saltado o anadido algo).
+    const a = align(target, value);
+    if (a.consumed === target.length || value.length >= target.length + MAX_EXTRA) {
+      void finish(value);
+    }
   }
 
   function block(e: React.SyntheticEvent) {
@@ -94,40 +100,67 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
     setTimeout(() => inputRef.current?.focus(), 0);
   }
 
+  const alignment = useMemo(() => align(target, typed), [target, typed]);
+
   const stats = useMemo(() => {
-    let errors = 0;
-    for (let i = 0; i < typed.length; i++) if (typed[i] !== target[i]) errors++;
+    const errors = alignment.errors;
     const minutes = Math.max(elapsed, 1000) / 60000;
     return {
       errors,
       ppm: startedAt && elapsed > 1500 ? Math.round(typed.length / minutes) : 0,
-      precision: typed.length ? Math.round(((typed.length - errors) / typed.length) * 100) : 100,
-      progress: Math.round((typed.length / target.length) * 100),
+      precision: typed.length ? Math.max(0, Math.round(((typed.length - errors) / typed.length) * 100)) : 100,
+      progress: Math.min(100, Math.round((alignment.consumed / target.length) * 100)),
     };
-  }, [typed, target, elapsed, startedAt]);
+  }, [alignment, typed.length, target.length, elapsed, startedAt]);
 
-  const next = typed.length < target.length ? target[typed.length] : "";
+  const cursor = alignment.consumed;
+  const next = cursor < target.length ? target[cursor] : "";
   const done = finishedRef.current || !!result;
+
+  // Mantiene la linea que se esta escribiendo a la vista: el cursor queda en la segunda linea visible.
+  useEffect(() => {
+    const box = textBoxRef.current;
+    const cur = cursorRef.current;
+    if (!box || !cur) return;
+    const lineHeight = cur.offsetHeight || 40;
+    const targetTop = Math.max(0, cur.offsetTop - lineHeight);
+    if (Math.abs(box.scrollTop - targetTop) > lineHeight / 2) {
+      box.scrollTo({ top: targetTop, behavior: "smooth" });
+    }
+  }, [cursor]);
 
   return (
     <div className="flex flex-wrap items-start gap-6">
       <section className="flex min-w-0 flex-[999_1_600px] flex-col gap-5">
         <div className="card flex flex-col gap-5 p-7">
           <div
-            className="max-h-[320px] overflow-y-auto whitespace-pre-wrap font-mono text-[22px] leading-[1.75] sm:text-[24px]"
+            ref={textBoxRef}
+            className="relative max-h-[320px] overflow-y-auto whitespace-pre-wrap font-mono text-[22px] leading-[1.75] sm:text-[24px]"
             onClick={() => inputRef.current?.focus()}
           >
             {target.split("").map((ch, i) => {
-              if (i < typed.length) {
-                return typed[i] === ch ? (
-                  <span key={i} className="text-ink">{ch}</span>
-                ) : (
-                  <span key={i} className="rounded bg-error-soft text-error">{ch === " " ? "_" : ch}</span>
-                );
+              if (i < cursor) {
+                const st = alignment.status[i];
+                if (st === ST_OK) return <span key={i} className="text-ink">{ch}</span>;
+                if (st === ST_MISSING)
+                  return (
+                    <span key={i} className="rounded bg-error-soft text-error underline decoration-dotted" title="Te lo has saltado">
+                      {ch === " " ? "_" : ch}
+                    </span>
+                  );
+                if (st === ST_WRONG)
+                  return (
+                    <span key={i} className="rounded bg-error-soft text-error">
+                      {ch === " " ? "_" : ch}
+                    </span>
+                  );
+                return <span key={i} className="text-ink">{ch}</span>;
               }
-              if (i === typed.length && !done) {
+              if (i === cursor && !done) {
                 return (
-                  <span key={i} className="border-b-[3px] border-accent bg-cursor text-ink">{ch}</span>
+                  <span key={i} ref={cursorRef} className="border-b-[3px] border-accent bg-cursor text-ink">
+                    {ch}
+                  </span>
                 );
               }
               return <span key={i} className="text-faint">{ch}</span>;
