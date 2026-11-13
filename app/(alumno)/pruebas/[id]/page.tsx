@@ -1,0 +1,55 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { db, type TestRow } from "@/lib/db";
+import { requireStudent } from "@/lib/session";
+import { TestRunner } from "./TestRunner";
+
+export default async function PruebaPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const { student, klass } = await requireStudent();
+  const { data } = await db().from("tests").select("*").eq("id", id).eq("class_id", klass.id).maybeSingle();
+  if (!data) notFound();
+  const test = data as TestRow;
+
+  const { data: done } = await db()
+    .from("attempts")
+    .select("id")
+    .eq("student_id", student.id)
+    .eq("test_id", id)
+    .eq("mode", "prueba")
+    .maybeSingle();
+  const { data: session } = await db()
+    .from("test_sessions")
+    .select("started_at")
+    .eq("student_id", student.id)
+    .eq("test_id", id)
+    .maybeSingle();
+
+  const now = Date.now();
+  let blocked: string | null = null;
+  if (done) blocked = "Ya has entregado esta prueba.";
+  else if (now < Date.parse(test.opens_at)) blocked = "La prueba todavía no está abierta.";
+  else if (now > Date.parse(test.closes_at)) blocked = "La prueba ya está cerrada.";
+  else if (session && now - Date.parse(session.started_at) > test.duration_sec * 1000)
+    blocked = "El tiempo de esta prueba se agotó sin entrega. Habla con tu profesor.";
+
+  const minutes = test.duration_sec / 60;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="kicker">Prueba · {Number.isInteger(minutes) ? `${minutes} min` : `${test.duration_sec} s`}</span>
+          <h1 className="h1 m-0">{test.title}</h1>
+        </div>
+        <Link href="/pruebas" className="btn btn-secondary">Volver</Link>
+      </div>
+      {blocked ? (
+        <div className="card p-8 text-[15px] text-muted">{blocked}</div>
+      ) : (
+        <TestRunner testId={test.id} text={test.content} durationSec={test.duration_sec} resumed={!!session} />
+      )}
+    </>
+  );
+}
