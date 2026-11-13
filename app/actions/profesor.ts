@@ -24,7 +24,10 @@ export async function setupTeacher(_prev: FormState, form: FormData): Promise<Fo
   if (password.length < 10) return { error: "La contraseña debe tener al menos 10 caracteres." };
   const password_hash = await bcrypt.hash(password, 12);
   const { data, error } = await db().from("teachers").insert({ name, email, password_hash }).select("id").single();
-  if (error || !data) return { error: "No se pudo crear la cuenta." };
+  if (error || !data) {
+       console.error("setupTeacher", error);
+       return { error: `No se pudo crear la cuenta: ${error?.message ?? "sin respuesta de la base de datos"}` };
+  }
   await startTeacherSession(data.id);
   redirect("/profesor");
 }
