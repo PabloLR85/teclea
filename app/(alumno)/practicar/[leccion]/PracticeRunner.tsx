@@ -3,7 +3,7 @@
 import { TypingExercise } from "@/components/TypingExercise";
 import { submitPractice } from "@/app/actions/alumno";
 
-export function PracticeRunner({ lessonId, text, nextHref }: { lessonId: string; text: string; nextHref: string | null }) {
+export function PracticeRunner({ lessonId, text, nextHref, penalty }: { lessonId: string; text: string; nextHref: string | null; penalty: number }) {
   return (
     <TypingExercise
       key={lessonId}
@@ -12,6 +12,7 @@ export function PracticeRunner({ lessonId, text, nextHref }: { lessonId: string;
       onSubmit={(p) => submitPractice(lessonId, p)}
       nextHref={nextHref}
       backHref="/practicar"
+      penalty={penalty}
     />
   );
 }

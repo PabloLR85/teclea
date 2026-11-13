@@ -14,6 +14,8 @@ type Props = {
   onSubmit: (payload: { typed: string; events: InputEvent[]; durationMs: number }) => Promise<SubmitResult>;
   nextHref?: string | null;
   backHref: string;
+  reviewHref?: string;
+  penalty: number;
   showGrade?: boolean;
 };
 
@@ -22,7 +24,7 @@ function fmtTime(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, backHref, showGrade }: Props) {
+export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, backHref, reviewHref, penalty, showGrade }: Props) {
   const [typed, setTyped] = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -105,13 +107,15 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
   const stats = useMemo(() => {
     const errors = alignment.errors;
     const minutes = Math.max(elapsed, 1000) / 60000;
+    const ready = !!startedAt && elapsed > 1500;
     return {
       errors,
-      ppm: startedAt && elapsed > 1500 ? Math.round(typed.length / minutes) : 0,
+      ppm: ready ? Math.round(typed.length / minutes) : 0,
+      net: ready ? Math.max(0, Math.round((typed.length - errors * penalty) / minutes)) : 0,
       precision: typed.length ? Math.max(0, Math.round(((typed.length - errors) / typed.length) * 100)) : 100,
       progress: Math.min(100, Math.round((alignment.consumed / target.length) * 100)),
     };
-  }, [alignment, typed.length, target.length, elapsed, startedAt]);
+  }, [alignment, typed.length, target.length, elapsed, startedAt, penalty]);
 
   const cursor = alignment.consumed;
   const next = cursor < target.length ? target[cursor] : "";
@@ -231,6 +235,11 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
                     Siguiente lección
                   </Link>
                 )}
+                {reviewHref && (
+                  <Link href={reviewHref} className="btn btn-primary">
+                    Ver corrección
+                  </Link>
+                )}
                 <Link href={backHref} className="btn btn-secondary">
                   Volver
                 </Link>
@@ -252,8 +261,9 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
           </div>
         )}
         <div className="card flex flex-col gap-1 p-6">
-          <span className="text-sm text-muted">Pulsaciones por minuto</span>
-          <span className="font-display text-[56px] font-bold leading-none tabular-nums">{stats.ppm}</span>
+          <span className="text-sm text-muted">Pulsaciones netas por minuto</span>
+          <span className="font-display text-[56px] font-bold leading-none tabular-nums">{stats.net}</span>
+          <span className="text-[13px] text-soft">Brutas: {stats.ppm}/min · cada error resta {penalty}</span>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="card flex flex-col gap-1 p-[18px]">

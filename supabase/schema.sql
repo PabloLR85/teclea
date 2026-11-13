@@ -59,8 +59,12 @@ create table if not exists attempts (
   accuracy numeric(5,1) not null,
   flagged boolean not null default false,
   flag_reason text,
+  typed text,
   created_at timestamptz not null default now()
 );
+
+-- Para bases creadas con la primera version
+alter table attempts add column if not exists typed text;
 
 create unique index if not exists attempts_one_per_test
   on attempts (student_id, test_id) where mode = 'prueba';

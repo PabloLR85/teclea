@@ -4,7 +4,19 @@ import { useState } from "react";
 import { TypingExercise } from "@/components/TypingExercise";
 import { startTest, submitTest } from "@/app/actions/alumno";
 
-export function TestRunner({ testId, text, durationSec, resumed }: { testId: string; text: string; durationSec: number; resumed: boolean }) {
+export function TestRunner({
+  testId,
+  text,
+  durationSec,
+  resumed,
+  penalty,
+}: {
+  testId: string;
+  text: string;
+  durationSec: number;
+  resumed: boolean;
+  penalty: number;
+}) {
   const [limitMs, setLimitMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,6 +38,8 @@ export function TestRunner({ testId, text, durationSec, resumed }: { testId: str
         limitMs={limitMs}
         onSubmit={(p) => submitTest(testId, p)}
         backHref="/pruebas"
+        reviewHref={`/pruebas/${testId}`}
+        penalty={penalty}
         showGrade
       />
     );

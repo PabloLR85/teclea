@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
 import { LEVELS, isUnlocked, ALL_LESSONS } from "@/lib/lessons";
 import { formatDateTime } from "@/lib/utils";
+import { evaluate, normalizeBaremo } from "@/lib/scoring";
 
 type Progress = { lesson_id: string; best_net: number; best_acc: number; completed: boolean };
 
@@ -18,7 +19,7 @@ export default async function PracticarPage() {
       .gte("closes_at", new Date().toISOString()),
     db()
       .from("attempts")
-      .select("id,mode,lesson_id,net_ppm,accuracy,created_at,flagged")
+      .select("id,mode,lesson_id,test_id,chars,errors,duration_ms,created_at,flagged")
       .eq("student_id", student.id)
       .order("created_at", { ascending: false })
       .limit(6),
@@ -141,17 +142,24 @@ export default async function PracticarPage() {
               </tr>
             </thead>
             <tbody>
-              {recent.map((a) => (
+              {recent.map((a) => {
+                const e = evaluate(a, normalizeBaremo(klass.baremo));
+                return (
                 <tr key={a.id}>
                   <td className="td">
-                    {a.mode === "prueba" ? "Prueba" : ALL_LESSONS.find((l) => l.id === a.lesson_id)?.title ?? "Práctica"}
+                    {a.mode === "prueba" ? (
+                      <Link href={`/pruebas/${a.test_id}`} className="text-accent">Prueba</Link>
+                    ) : (
+                      ALL_LESSONS.find((l) => l.id === a.lesson_id)?.title ?? "Práctica"
+                    )}
                     {a.flagged && <span className="ml-2 text-xs text-error-ink">(no cuenta)</span>}
                   </td>
                   <td className="td text-muted">{formatDateTime(a.created_at)}</td>
-                  <td className="td text-right font-mono">{Math.round(Number(a.net_ppm))}</td>
-                  <td className="td text-right font-mono">{Number(a.accuracy)} %</td>
+                  <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
+                  <td className="td text-right font-mono">{e.accuracy} %</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </section>

@@ -4,7 +4,7 @@ import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
 import { requireTeacherClass } from "@/lib/session";
 import { ActionForm } from "@/components/ActionForm";
 import { ALL_LESSONS } from "@/lib/lessons";
-import { computeGrade, formatGrade, normalizeBaremo, type Baremo } from "@/lib/scoring";
+import { computeGrade, evaluate, formatGrade, normalizeBaremo, type Baremo } from "@/lib/scoring";
 import { getRanking } from "@/lib/ranking";
 import { formatDateTime, isoToMadridLocal } from "@/lib/utils";
 import {
@@ -287,7 +287,7 @@ async function ResultadosTab({
   const byStudent = new Map(((att ?? []) as AttemptRow[]).map((a) => [a.student_id, a]));
   const started = new Set((sessions ?? []).map((s) => s.student_id as string));
 
-  const graded = [...byStudent.values()].filter((a) => !a.flagged).map((a) => computeGrade(Number(a.net_ppm), Number(a.accuracy), baremo));
+  const graded = [...byStudent.values()].filter((a) => !a.flagged).map((a) => evaluate(a, baremo).grade);
   const avg = graded.length ? graded.reduce((x, y) => x + y, 0) / graded.length : null;
   const passed = graded.filter((g) => g >= 5).length;
 
@@ -354,17 +354,18 @@ async function ResultadosTab({
           <tbody>
             {students.map((s) => {
               const a = byStudent.get(s.id);
-              const grade = a ? computeGrade(Number(a.net_ppm), Number(a.accuracy), baremo) : null;
+              const ev = a ? evaluate(a, baremo) : null;
+              const grade = ev ? ev.grade : null;
               return (
                 <tr key={s.id}>
                   <td className="td font-medium">
                     {s.full_name}
                     {a?.flagged && <span className="mt-0.5 block text-xs font-semibold text-error-ink">En revisión: {a.flag_reason}</span>}
                   </td>
-                  <td className="td text-right font-mono">{a ? Math.round(Number(a.gross_ppm)) : "-"}</td>
+                  <td className="td text-right font-mono">{ev ? Math.round(ev.grossPpm) : "-"}</td>
                   <td className="td text-right font-mono">{a ? a.errors : "-"}</td>
-                  <td className="td text-right font-mono">{a ? `${Number(a.accuracy)} %` : "-"}</td>
-                  <td className="td text-right font-mono font-semibold">{a ? Math.round(Number(a.net_ppm)) : "-"}</td>
+                  <td className="td text-right font-mono">{ev ? `${ev.accuracy} %` : "-"}</td>
+                  <td className="td text-right font-mono font-semibold">{ev ? Math.round(ev.netPpm) : "-"}</td>
                   <td className="td text-right">
                     {a && grade !== null ? (
                       <span
@@ -380,6 +381,11 @@ async function ResultadosTab({
                   </td>
                   <td className="td">
                     <div className="flex justify-end gap-1.5">
+                      {a && (
+                        <Link href={`/profesor/clase/${classId}/intento/${a.id}`} className="btn btn-secondary h-9 px-3 text-[13px]">
+                          Ver
+                        </Link>
+                      )}
                       {a?.flagged && (
                         <form action={validateAttempt.bind(null, classId, a.id)}>
                           <button type="submit" className="btn btn-secondary h-9 px-3 text-[13px]">Validar</button>

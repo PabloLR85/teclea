@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
 import { getTeacher } from "@/lib/session";
-import { computeGrade, normalizeBaremo } from "@/lib/scoring";
+import { evaluate, normalizeBaremo } from "@/lib/scoring";
 import { getRanking } from "@/lib/ranking";
 import { ALL_LESSONS } from "@/lib/lessons";
 
@@ -56,16 +56,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         rows.push([s.full_name, s.username, "", "", "", "", "", "", "Sin entregar"]);
         continue;
       }
-      const grade = computeGrade(Number(a.net_ppm), Number(a.accuracy), baremo);
+      const e = evaluate(a, baremo);
       rows.push([
         s.full_name,
         s.username,
         a.chars,
         a.errors,
-        num(a.gross_ppm),
-        num(a.net_ppm),
-        num(a.accuracy),
-        num(grade.toFixed(1)),
+        num(e.grossPpm),
+        num(e.netPpm),
+        num(e.accuracy),
+        num(e.grade.toFixed(1)),
         a.flagged ? `En revisión: ${a.flag_reason ?? ""}` : "Entregada",
       ]);
     }

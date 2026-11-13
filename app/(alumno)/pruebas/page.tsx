@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { db, type TestRow } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
-import { computeGrade, formatGrade, normalizeBaremo } from "@/lib/scoring";
+import { evaluate, formatGrade, normalizeBaremo } from "@/lib/scoring";
 import { formatDateTime } from "@/lib/utils";
 
 export default async function PruebasPage() {
   const { student, klass } = await requireStudent();
   const [{ data: tests }, { data: attempts }] = await Promise.all([
     db().from("tests").select("*").eq("class_id", klass.id).order("opens_at", { ascending: false }),
-    db().from("attempts").select("test_id,net_ppm,accuracy,flagged").eq("student_id", student.id).eq("mode", "prueba"),
+    db().from("attempts").select("test_id,chars,errors,duration_ms,flagged").eq("student_id", student.id).eq("mode", "prueba"),
   ]);
   const baremo = normalizeBaremo(klass.baremo);
   const byTest = new Map((attempts ?? []).map((a) => [a.test_id as string, a]));
@@ -29,7 +29,10 @@ export default async function PruebasPage() {
           const open = now >= Date.parse(t.opens_at) && now <= Date.parse(t.closes_at);
           const upcoming = now < Date.parse(t.opens_at);
           let status: string;
-          if (a) status = a.flagged ? "Entregada (en revisión)" : `Entregada · nota ${formatGrade(computeGrade(Number(a.net_ppm), Number(a.accuracy), baremo))}`;
+          if (a) {
+            const e = evaluate(a, baremo);
+            status = a.flagged ? "Entregada (en revisión)" : `Entregada · nota ${formatGrade(e.grade)} · ${Math.round(e.netPpm)} netas/min`;
+          }
           else if (open) status = `Abierta hasta el ${formatDateTime(t.closes_at)}`;
           else if (upcoming) status = `Se abre el ${formatDateTime(t.opens_at)}`;
           else status = "Cerrada sin entregar";
@@ -45,6 +48,11 @@ export default async function PruebasPage() {
               {open && !a && (
                 <Link href={`/pruebas/${t.id}`} className="btn btn-primary">
                   Hacer la prueba
+                </Link>
+              )}
+              {a && (
+                <Link href={`/pruebas/${t.id}`} className="btn btn-secondary">
+                  Ver resultado
                 </Link>
               )}
             </div>

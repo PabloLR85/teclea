@@ -9,7 +9,7 @@ Tecnología: Next.js (desplegado en Vercel), base de datos Supabase (PostgreSQL)
 ### 1. Supabase (base de datos)
 
 1. Entra en https://supabase.com y crea un proyecto nuevo. Elige una región europea.
-2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**.
+2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**. Si tu base se creó con la primera versión, ejecuta también `supabase/migracion-2.sql`.
 3. Ve a **Project Settings > API** (o **API Keys**) y copia dos datos:
    - **Project URL**: algo como `https://abcdxyz.supabase.co`
    - **service_role key** (o la *secret key* `sb_secret_...` en los proyectos nuevos). Esta clave es secreta: solo va en Vercel, nunca en el código.

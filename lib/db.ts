@@ -62,5 +62,6 @@ export type AttemptRow = {
   accuracy: number;
   flagged: boolean;
   flag_reason: string | null;
+  typed: string | null;
   created_at: string;
 };

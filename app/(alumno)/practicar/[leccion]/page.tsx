@@ -4,12 +4,13 @@ import { db } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
 import { ALL_LESSONS, findLesson, isUnlocked } from "@/lib/lessons";
 import { PracticeRunner } from "./PracticeRunner";
+import { normalizeBaremo } from "@/lib/scoring";
 
 export default async function LeccionPage({ params }: { params: Promise<{ leccion: string }> }) {
   const { leccion } = await params;
   const found = findLesson(leccion);
   if (!found) notFound();
-  const { student } = await requireStudent();
+  const { student, klass } = await requireStudent();
   const { data: progress } = await db().from("lesson_progress").select("lesson_id,completed,best_net").eq("student_id", student.id);
   const completed = new Set((progress ?? []).filter((p) => p.completed).map((p) => p.lesson_id as string));
 
@@ -44,7 +45,7 @@ export default async function LeccionPage({ params }: { params: Promise<{ leccio
           <Link href="/practicar" className="btn btn-secondary">Todas las lecciones</Link>
         </div>
       </div>
-      <PracticeRunner lessonId={lesson.id} text={lesson.text} nextHref={next ? `/practicar/${next.id}` : null} />
+      <PracticeRunner lessonId={lesson.id} text={lesson.text} nextHref={next ? `/practicar/${next.id}` : null} penalty={normalizeBaremo(klass.baremo).penalty} />
     </>
   );
 }

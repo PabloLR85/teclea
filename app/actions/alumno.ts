@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, type TestRow } from "@/lib/db";
 import { endStudentSession, requireStudent, startStudentSession } from "@/lib/session";
-import { checkEvents, computeGrade, computeScore, MAX_EXTRA, normalizeBaremo, type InputEvent } from "@/lib/scoring";
+import { checkEvents, computeScore, evaluate, MAX_EXTRA, normalizeBaremo, type InputEvent } from "@/lib/scoring";
 import { findLesson, isUnlocked, PASS_ACCURACY } from "@/lib/lessons";
 
 const MAX_FAILED_LOGINS = 10;
@@ -53,6 +53,18 @@ export async function updateAlias(_prev: LoginState, form: FormData): Promise<Lo
   return {};
 }
 
+
+// Inserta un intento. Si la base aun no tiene la columna "typed" (falta la migracion 2), lo guarda sin ella.
+async function insertAttempt(row: Record<string, unknown>) {
+  let { error } = await db().from("attempts").insert(row);
+  if (error && /typed/i.test(error.message)) {
+    const { typed: _omit, ...rest } = row;
+    void _omit;
+    ({ error } = await db().from("attempts").insert(rest));
+  }
+  return error;
+}
+
 export type SubmitPayload = { typed: string; events: InputEvent[]; durationMs: number };
 
 export type SubmitResult =
@@ -95,7 +107,7 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
   const s = computeScore(target, p.typed, p.durationMs, baremo.penalty);
   const flagged = checkEvents(p.events, p.typed.length, p.durationMs);
 
-  await db().from("attempts").insert({
+  const insertError = await insertAttempt({
     student_id: student.id,
     class_id: klass.id,
     mode: "practica",
@@ -108,7 +120,9 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
     accuracy: s.accuracy,
     flagged: !!flagged,
     flag_reason: flagged,
+    typed: p.typed,
   });
+  if (insertError) return { ok: false, error: "No se pudo guardar el resultado. Vuelve a intentarlo." };
 
   const fullText = s.consumed === target.length;
   const completed = !flagged && fullText && s.accuracy >= PASS_ACCURACY;
@@ -127,7 +141,8 @@ export async function submitPractice(lessonId: string, payload: SubmitPayload): 
   }
   await db().from("students").update({ last_seen_at: new Date().toISOString() }).eq("id", student.id);
   revalidatePath("/practicar");
-  return { ok: true, chars: s.chars, errors: s.errors, netPpm: s.netPpm, grossPpm: s.grossPpm, accuracy: s.accuracy, flagged, completed };
+  const e = evaluate({ chars: s.chars, errors: s.errors, duration_ms: p.durationMs }, baremo);
+  return { ok: true, chars: s.chars, errors: s.errors, netPpm: e.netPpm, grossPpm: e.grossPpm, accuracy: e.accuracy, flagged, completed };
 }
 
 async function loadTest(testId: string, classId: string): Promise<TestRow | null> {
@@ -198,7 +213,7 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
 
   const baremo = normalizeBaremo(klass.baremo);
   const s = computeScore(test.content, p.typed, durationMs, baremo.penalty);
-  const { error } = await db().from("attempts").insert({
+  const error = await insertAttempt({
     student_id: student.id,
     class_id: klass.id,
     mode: "prueba",
@@ -211,8 +226,17 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
     accuracy: s.accuracy,
     flagged: !!flagged,
     flag_reason: flagged,
+    typed: p.typed,
   });
-  if (error) return { ok: false, error: "Esta prueba ya estaba entregada." };
+  if (error) {
+    console.error("submitTest", error);
+    return {
+      ok: false,
+      error: error.code === "23505" ? "Esta prueba ya estaba entregada." : "No se pudo guardar la prueba. Avisa al profesor antes de cerrar la página.",
+    };
+  }
   revalidatePath("/pruebas");
-  return { ok: true, chars: s.chars, errors: s.errors, netPpm: s.netPpm, grossPpm: s.grossPpm, accuracy: s.accuracy, flagged, grade: computeGrade(s.netPpm, s.accuracy, baremo) };
+  // Mismo calculo que veran despues el alumno y el profesor
+  const e = evaluate({ chars: s.chars, errors: s.errors, duration_ms: durationMs }, baremo);
+  return { ok: true, chars: s.chars, errors: s.errors, netPpm: e.netPpm, grossPpm: e.grossPpm, accuracy: e.accuracy, flagged, grade: e.grade };
 }

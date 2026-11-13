@@ -129,6 +129,20 @@ export function computeGrade(netPpm: number, accuracy: number, b: Baremo): numbe
   return Math.round(g * 10) / 10;
 }
 
+// Resultado de un intento guardado, siempre con el baremo actual de la clase.
+// Es la unica fuente de cifras para alumno, profesor, CSV y ranking: asi todos ven lo mismo.
+export type Evaluated = { grossPpm: number; netPpm: number; accuracy: number; grade: number };
+
+export function evaluate(a: { chars: number; errors: number; duration_ms: number }, b: Baremo): Evaluated {
+  const chars = Number(a.chars);
+  const errors = Number(a.errors);
+  const minutes = Math.max(Number(a.duration_ms), 1000) / 60000;
+  const grossPpm = r1(chars / minutes);
+  const netPpm = r1(Math.max(0, (chars - errors * b.penalty) / minutes));
+  const accuracy = r1(chars ? Math.max(0, ((chars - errors) / chars) * 100) : 0);
+  return { grossPpm, netPpm, accuracy, grade: computeGrade(netPpm, accuracy, b) };
+}
+
 export function formatGrade(g: number): string {
   return g.toFixed(1).replace(".", ",");
 }

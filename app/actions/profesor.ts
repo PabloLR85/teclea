@@ -25,8 +25,8 @@ export async function setupTeacher(_prev: FormState, form: FormData): Promise<Fo
   const password_hash = await bcrypt.hash(password, 12);
   const { data, error } = await db().from("teachers").insert({ name, email, password_hash }).select("id").single();
   if (error || !data) {
-       console.error("setupTeacher", error);
-       return { error: `No se pudo crear la cuenta: ${error?.message ?? "sin respuesta de la base de datos"}` };
+    console.error("setupTeacher", error);
+    return { error: `No se pudo crear la cuenta: ${error?.message ?? "sin respuesta de la base de datos"}` };
   }
   await startTeacherSession(data.id);
   redirect("/profesor");
@@ -165,6 +165,7 @@ export async function allowRetake(classId: string, testId: string, studentId: st
   await db().from("attempts").delete().eq("test_id", testId).eq("student_id", studentId).eq("class_id", classId).eq("mode", "prueba");
   await db().from("test_sessions").delete().eq("test_id", testId).eq("student_id", studentId);
   revalidatePath(`/profesor/clase/${classId}`);
+  redirect(`/profesor/clase/${classId}?tab=resultados&prueba=${testId}`);
 }
 
 export async function validateAttempt(classId: string, attemptId: string) {
