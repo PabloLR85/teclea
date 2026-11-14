@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { endTeacherSession, requireTeacher, requireTeacherClass, startTeacherSession } from "@/lib/session";
 import { defaultAlias, madridLocalToIso, newClassCode, newPin, slugifyName } from "@/lib/utils";
+import { findForm } from "@/lib/forms";
 
 export type FormState = { error?: string; ok?: string };
 
@@ -125,15 +126,21 @@ export async function deleteStudent(classId: string, studentId: string) {
 export async function createTest(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
   await requireTeacherClass(classId);
   const title = String(form.get("title") ?? "").trim();
-  const content = String(form.get("content") ?? "")
-    .replace(/\r?\n+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const kind = String(form.get("kind") ?? "texto");
+  const formId = String(form.get("form_id") ?? "");
+  const content =
+    kind === "formulario"
+      ? `form:${formId}`
+      : String(form.get("content") ?? "")
+          .replace(/\r?\n+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
   const durationMin = Number(String(form.get("duration") ?? "").replace(",", "."));
   const opens = String(form.get("opens") ?? "");
   const closes = String(form.get("closes") ?? "");
   if (!title) return { error: "Pon un título a la prueba." };
-  if (content.length < 50) return { error: "El texto debe tener al menos 50 caracteres." };
+  if (kind === "formulario" && !findForm(formId)) return { error: "Elige un formulario." };
+  if (kind !== "formulario" && content.length < 50) return { error: "El texto debe tener al menos 50 caracteres." };
   if (!Number.isFinite(durationMin) || durationMin < 0.5 || durationMin > 30) return { error: "La duración debe estar entre 0,5 y 30 minutos." };
   if (!opens || !closes) return { error: "Indica cuándo se abre y cuándo se cierra." };
   const opens_at = madridLocalToIso(opens);

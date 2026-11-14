@@ -54,6 +54,7 @@ export type AttemptRow = {
   mode: "practica" | "prueba" | "carrera";
   lesson_id: string | null;
   test_id: string | null;
+  race_id?: string | null;
   chars: number;
   errors: number;
   duration_ms: number;

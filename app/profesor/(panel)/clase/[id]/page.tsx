@@ -18,12 +18,18 @@ import {
   updateBaremo,
   validateAttempt,
 } from "@/app/actions/profesor";
+import { createRace } from "@/app/actions/carrera";
+import { racePhase, type RaceRow } from "@/lib/races";
+import { TextPicker } from "@/components/TextPicker";
+import { TestContentFields } from "@/components/TestContentFields";
+import { findForm } from "@/lib/forms";
 
-type Tab = "alumnos" | "pruebas" | "resultados" | "baremo";
+type Tab = "alumnos" | "pruebas" | "resultados" | "carreras" | "baremo";
 const TABS: { id: Tab; label: string }[] = [
   { id: "alumnos", label: "Alumnos" },
   { id: "pruebas", label: "Pruebas" },
   { id: "resultados", label: "Resultados" },
+  { id: "carreras", label: "Carreras" },
   { id: "baremo", label: "Baremo" },
 ];
 
@@ -77,6 +83,7 @@ export default async function ClasePage({
       {tab === "alumnos" && <AlumnosTab classId={id} students={students} />}
       {tab === "pruebas" && <PruebasTab classId={id} studentCount={students.length} />}
       {tab === "resultados" && <ResultadosTab classId={id} students={students} baremo={baremo} selected={sp.prueba} />}
+      {tab === "carreras" && <CarrerasTab classId={id} />}
       {tab === "baremo" && <BaremoTab classId={id} baremo={baremo} />}
     </>
   );
@@ -200,7 +207,9 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
                 <div className="flex flex-col gap-1">
                   <span className="text-base font-semibold">{t.title}</span>
                   <span className="text-sm text-muted">
-                    {t.duration_sec % 60 === 0 ? `${t.duration_sec / 60} min` : `${t.duration_sec} s`} · {t.content.length} caracteres · de {formatDateTime(t.opens_at)} a {formatDateTime(t.closes_at)}
+                    {t.duration_sec % 60 === 0 ? `${t.duration_sec / 60} min` : `${t.duration_sec} s`} ·{" "}
+                    {t.content.startsWith("form:") ? `Formulario: ${findForm(t.content.slice(5))?.title ?? ""}` : `${t.content.length} caracteres`} · de{" "}
+                    {formatDateTime(t.opens_at)} a {formatDateTime(t.closes_at)}
                   </span>
                   <span className={`text-[13px] font-semibold ${open ? "text-accent" : "text-soft"}`}>
                     {open ? "Abierta" : upcoming ? "Programada" : "Cerrada"} · {delivered.get(t.id) ?? 0} de {studentCount} entregadas
@@ -224,7 +233,7 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
                   </details>
                 </div>
               </div>
-              <p className="m-0 line-clamp-2 font-mono text-sm text-muted">{t.content}</p>
+              {!t.content.startsWith("form:") && <p className="m-0 line-clamp-2 font-mono text-sm text-muted">{t.content}</p>}
             </div>
           );
         })}
@@ -236,11 +245,7 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
             <label htmlFor="title" className="label">Título</label>
             <input id="title" name="title" required placeholder="Prueba 1 · Fila guía" className="field" />
           </div>
-          <div className="flex flex-col gap-2">
-            <label htmlFor="content" className="label">Texto a copiar</label>
-            <textarea id="content" name="content" rows={6} required minLength={50} className="w-full rounded-[10px] border border-line-strong bg-white px-3.5 py-3 font-mono text-sm" />
-            <span className="text-[13px] text-soft">Que sobre texto: nadie debería terminarlo antes de tiempo.</span>
-          </div>
+          <TestContentFields />
           <div className="flex flex-col gap-2">
             <label htmlFor="duration" className="label">Duración (minutos)</label>
             <input id="duration" name="duration" type="number" min={0.5} max={30} step={0.5} defaultValue={3} required className="field" />
@@ -458,6 +463,65 @@ function BaremoTab({ classId, baremo }: { classId: string; baremo: Baremo }) {
           <strong>Ejemplo con el baremo actual.</strong> Prueba de {exMin} minutos, {exChars} pulsaciones y {exErrors} errores: {Math.round(exNet)} netas/min, {Math.round(exAcc)} % de precisión, nota{" "}
           <strong>{formatGrade(exGrade)}</strong>.
         </div>
+      </aside>
+    </div>
+  );
+}
+
+// ---------------- Carreras ----------------
+
+async function CarrerasTab({ classId }: { classId: string }) {
+  const { data, error } = await db().from("races").select("*").eq("class_id", classId).order("created_at", { ascending: false }).limit(30);
+  const races = (data ?? []) as RaceRow[];
+  const { data: parts } = races.length
+    ? await db().from("race_participants").select("race_id").in("race_id", races.map((r) => r.id))
+    : { data: [] as { race_id: string }[] };
+  const count = new Map<string, number>();
+  for (const p of parts ?? []) count.set(p.race_id, (count.get(p.race_id) ?? 0) + 1);
+  const phaseLabel = { waiting: "Sala de espera", countdown: "Cuenta atrás", running: "En marcha", finished: "Terminada" } as const;
+
+  return (
+    <div className="flex flex-wrap items-start gap-6">
+      <section className="flex min-w-0 flex-[999_1_560px] flex-col gap-3">
+        {error && (
+          <div className="rounded-2xl bg-error-soft p-6 text-[15px] text-error-ink">
+            Falta ejecutar la actualización de la base de datos para las carreras (archivo supabase/migracion-3.sql).
+          </div>
+        )}
+        {!error && races.length === 0 && <div className="card p-8 text-muted">Todavía no hay carreras. Crea la primera con el formulario.</div>}
+        {races.map((r) => {
+          const ph = racePhase(r);
+          return (
+            <div key={r.id} className="card flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+              <div className="flex flex-col gap-1">
+                <span className="text-base font-semibold">{r.title}</span>
+                <span className="text-sm text-muted">
+                  {Math.round(r.duration_sec / 60) || 1} min · {r.content.length} caracteres · {count.get(r.id) ?? 0} participantes
+                </span>
+                <span className={`text-[13px] font-semibold ${ph === "finished" ? "text-soft" : "text-accent"}`}>
+                  {phaseLabel[ph]} · {formatDateTime(r.starts_at ?? r.created_at)}
+                </span>
+              </div>
+              <Link href={`/profesor/clase/${classId}/carrera/${r.id}`} className={ph === "finished" ? "btn btn-secondary" : "btn btn-primary"}>
+                {ph === "finished" ? "Ver resultados" : "Abrir sala"}
+              </Link>
+            </div>
+          );
+        })}
+      </section>
+      <aside className="card flex flex-[1_1_340px] flex-col gap-4 p-6">
+        <h2 className="h2 m-0">Nueva carrera</h2>
+        <ActionForm action={createRace.bind(null, classId)} submitLabel="Crear y abrir sala" pendingLabel="Creando...">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="race-title" className="label">Título</label>
+            <input id="race-title" name="title" placeholder="Carrera del viernes" className="field" />
+          </div>
+          <TextPicker idPrefix="race" defaultTextId="texto-grabacion" />
+          <div className="flex flex-col gap-2">
+            <label htmlFor="race-duration" className="label">Duración (minutos)</label>
+            <input id="race-duration" name="duration" type="number" min={0.5} max={15} step={0.5} defaultValue={2} required className="field" />
+          </div>
+        </ActionForm>
       </aside>
     </div>
   );

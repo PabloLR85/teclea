@@ -6,6 +6,9 @@ import { db, type TestRow } from "@/lib/db";
 import { endStudentSession, requireStudent, startStudentSession } from "@/lib/session";
 import { checkEvents, computeScore, evaluate, MAX_EXTRA, normalizeBaremo, type InputEvent } from "@/lib/scoring";
 import { findLesson, isUnlocked, PASS_ACCURACY } from "@/lib/lessons";
+import { insertAttempt, sanitize, type SubmitPayload, type SubmitResult } from "@/lib/attempts";
+
+export type { SubmitPayload, SubmitResult };
 
 const MAX_FAILED_LOGINS = 10;
 
@@ -54,38 +57,6 @@ export async function updateAlias(_prev: LoginState, form: FormData): Promise<Lo
 }
 
 
-// Inserta un intento. Si la base aun no tiene la columna "typed" (falta la migracion 2), lo guarda sin ella.
-async function insertAttempt(row: Record<string, unknown>) {
-  let { error } = await db().from("attempts").insert(row);
-  if (error && /typed/i.test(error.message)) {
-    const { typed: _omit, ...rest } = row;
-    void _omit;
-    ({ error } = await db().from("attempts").insert(rest));
-  }
-  return error;
-}
-
-export type SubmitPayload = { typed: string; events: InputEvent[]; durationMs: number };
-
-export type SubmitResult =
-  | {
-      ok: true;
-      chars: number;
-      errors: number;
-      netPpm: number;
-      grossPpm: number;
-      accuracy: number;
-      flagged: string | null;
-      completed?: boolean;
-      grade?: number;
-    }
-  | { ok: false; error: string };
-
-function sanitize(p: SubmitPayload, maxLen: number): SubmitPayload | null {
-  if (typeof p?.typed !== "string" || !Array.isArray(p.events) || typeof p.durationMs !== "number") return null;
-  if (!Number.isFinite(p.durationMs) || p.durationMs <= 0 || p.durationMs > 60 * 60 * 1000) return null;
-  return { typed: p.typed.slice(0, maxLen), events: p.events.slice(0, 20000), durationMs: Math.round(p.durationMs) };
-}
 
 export async function submitPractice(lessonId: string, payload: SubmitPayload): Promise<SubmitResult> {
   const { student, klass } = await requireStudent();

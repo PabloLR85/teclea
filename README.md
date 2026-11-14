@@ -9,7 +9,7 @@ Tecnología: Next.js (desplegado en Vercel), base de datos Supabase (PostgreSQL)
 ### 1. Supabase (base de datos)
 
 1. Entra en https://supabase.com y crea un proyecto nuevo. Elige una región europea.
-2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**. Si tu base se creó con la primera versión, ejecuta también `supabase/migracion-2.sql`.
+2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**. Si tu base se creó con una versión anterior, ejecuta también `supabase/migracion-3.sql` (incluye la 2).
 3. Ve a **Project Settings > API** (o **API Keys**) y copia dos datos:
    - **Project URL**: algo como `https://abcdxyz.supabase.co`
    - **service_role key** (o la *secret key* `sb_secret_...` en los proyectos nuevos). Esta clave es secreta: solo va en Vercel, nunca en el código.
@@ -64,14 +64,17 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 
 - **Practicar:** 6 niveles y 19 lecciones (fila guía, fila superior, fila inferior, teclado numérico, mayúsculas y tildes, fichas de datos). Una lección se supera completando el texto con al menos un 90 % de precisión, y eso desbloquea la siguiente.
 - **Pruebas:** un solo intento, dentro de la franja horaria que marques. El reloj empieza al pulsar "Empezar" y sigue corriendo aunque se recargue la página. Al acabar el tiempo se entrega sola.
+- **Formularios:** 5 plantillas (alta de cliente, pedido, factura de proveedor, encuesta e inventario). El documento original sale a la izquierda y el formulario a la derecha. Se corrige campo a campo.
+- **Carrera:** salas en directo que abre el profesor. Cuenta atrás, barras de avance de todos y clasificación final.
 - **Ranking:** semanal (mejor marca desde el lunes) y general (media de las 5 mejores marcas). Solo cuentan ejercicios de 50 caracteres o más. Aparece el alias, nunca el nombre real.
 - **Perfil:** cada alumno puede cambiar su alias.
 
 ### Profesor
 
 - **Alumnos:** alta masiva, PIN visible, nuevo PIN, lecciones superadas, mejor marca de la semana, última conexión y exportación del resumen en CSV.
-- **Pruebas:** texto, duración y franja de apertura. Se pueden cerrar antes de tiempo.
+- **Pruebas:** de texto (con banco de textos por categorías) o de formularios, con duración y franja de apertura. Se pueden cerrar antes de tiempo.
 - **Resultados:** brutas, errores, precisión, netas y nota por alumno. Botones para validar un intento marcado y para permitir repetir. Exportación en CSV que se abre directamente en Excel.
+- **Carreras:** crea una sala con un texto del banco o uno propio, ve quién entra, da la salida y consulta los resultados guardados.
 - **Baremo:** netas para el 5, netas para el 10, precisión mínima y penalización por error. Las notas se recalculan al cambiarlo.
 
 ### Puntuación
@@ -125,6 +128,8 @@ supabase/schema.sql           Esquema de la base de datos
 
 Las lecciones se editan en `lib/lessons.ts`.
 
-## Próxima fase
+## Contenidos editables
 
-Carreras en directo: salas con texto común, cuenta atrás y barras de avance en tiempo real con Supabase Realtime. La tabla `attempts` ya admite el modo `carrera`.
+- Lecciones de práctica: `lib/lessons.ts`
+- Banco de textos: `lib/textBank.ts`
+- Formularios y sus registros: `lib/forms.ts`

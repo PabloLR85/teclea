@@ -4,6 +4,8 @@ import { requireStudent } from "@/lib/session";
 import { LEVELS, isUnlocked, ALL_LESSONS } from "@/lib/lessons";
 import { formatDateTime } from "@/lib/utils";
 import { evaluate, normalizeBaremo } from "@/lib/scoring";
+import { racePhase, type RaceRow } from "@/lib/races";
+import { FORMS, findForm } from "@/lib/forms";
 
 type Progress = { lesson_id: string; best_net: number; best_acc: number; completed: boolean };
 
@@ -37,6 +39,9 @@ export default async function PracticarPage() {
   const deliveredIds = new Set((delivered ?? []).map((d) => d.test_id));
   const pendingTests = (openTests ?? []).filter((t) => !deliveredIds.has(t.id));
 
+  const { data: racesData } = await db().from("races").select("*").eq("class_id", klass.id).neq("status", "finished").order("created_at", { ascending: false }).limit(5);
+  const openRace = ((racesData ?? []) as RaceRow[]).find((r) => racePhase(r) !== "finished");
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -52,6 +57,17 @@ export default async function PracticarPage() {
           </Link>
         )}
       </div>
+
+      {openRace && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ink px-6 py-4">
+          <span className="text-[15px] text-white">
+            <strong>Carrera en directo:</strong> {openRace.title}. {racePhase(openRace) === "waiting" ? "La sala de espera está abierta." : "Está en marcha."}
+          </span>
+          <Link href={`/carrera/${openRace.id}`} className="btn bg-white text-ink hover:bg-accent-soft">
+            Entrar en la sala
+          </Link>
+        </div>
+      )}
 
       {pendingTests.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-accent-soft px-6 py-4">
@@ -129,6 +145,22 @@ export default async function PracticarPage() {
         })}
       </div>
 
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="h2 m-0">Formularios</h2>
+          <p className="m-0 text-[15px] text-muted">Grabación real: lee el documento de la izquierda y rellena el formulario de la derecha. Siempre disponibles.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FORMS.map((f) => (
+            <Link key={f.id} href={`/practicar/formulario/${f.id}`} className="card flex flex-col gap-1.5 p-5 text-ink no-underline hover:border-accent-line">
+              <span className="text-base font-semibold">{f.title}</span>
+              <span className="text-sm leading-relaxed text-muted">{f.description}</span>
+              <span className="text-[13px] font-semibold text-accent">{f.fields.length} campos por registro</span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       {recent && recent.length > 0 && (
         <section className="card overflow-x-auto">
           <h2 className="h2 m-0 px-5 pt-5">Últimos ejercicios</h2>
@@ -150,7 +182,8 @@ export default async function PracticarPage() {
                     {a.mode === "prueba" ? (
                       <Link href={`/pruebas/${a.test_id}`} className="text-accent">Prueba</Link>
                     ) : (
-                      ALL_LESSONS.find((l) => l.id === a.lesson_id)?.title ?? "Práctica"
+                      ALL_LESSONS.find((l) => l.id === a.lesson_id)?.title ??
+                      (a.lesson_id?.startsWith("form:") ? `Formulario: ${findForm(a.lesson_id.slice(5))?.title ?? ""}` : a.mode === "carrera" ? "Carrera" : "Práctica")
                     )}
                     {a.flagged && <span className="ml-2 text-xs text-error-ink">(no cuenta)</span>}
                   </td>

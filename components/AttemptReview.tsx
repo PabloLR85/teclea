@@ -1,4 +1,6 @@
 import { align, formatGrade, ST_MISSING, ST_OK, ST_WRONG, type Evaluated } from "@/lib/scoring";
+import { parseStoredForm } from "@/lib/forms";
+import { FormReview } from "./FormReview";
 
 type Props = {
   target: string;
@@ -21,7 +23,8 @@ const fmt = (n: number) => String(n).replace(".", ",");
 // Ficha de resultado de un intento. La usan igual el alumno y el profesor,
 // para que los dos vean exactamente las mismas cifras y la misma correccion.
 export function AttemptReview({ target, typed, chars, errors, durationMs, result, showGrade, flagged }: Props) {
-  const a = typed !== null ? align(target, typed) : null;
+  const stored = parseStoredForm(typed);
+  const a = typed !== null && !stored ? align(target, typed) : null;
   const tiles = [
     { label: "Netas/min", value: fmt(result.netPpm), strong: true },
     { label: "Brutas/min", value: fmt(result.grossPpm) },
@@ -63,13 +66,15 @@ export function AttemptReview({ target, typed, chars, errors, durationMs, result
       <div className="card flex flex-col gap-4 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="h2 m-0">Corrección</h2>
-          <div className="flex flex-wrap gap-4 text-[13px] text-muted">
+          <div className={`flex flex-wrap gap-4 text-[13px] text-muted ${stored ? "hidden" : ""}`}>
             <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-error-soft ring-1 ring-error" /> Tecla equivocada</span>
             <span className="flex items-center gap-1.5"><span className="rounded bg-error-soft px-1 font-mono text-error underline decoration-dotted">a</span> Carácter saltado</span>
             <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-line" /> Sin llegar a escribir</span>
           </div>
         </div>
-        {a ? (
+        {stored ? (
+          <FormReview formId={stored.form} answers={stored.answers} submitted={stored.submitted} />
+        ) : a ? (
           <div className="whitespace-pre-wrap font-mono text-[17px] leading-[1.8]">
             {target.split("").map((ch, i) => {
               if (i >= a.consumed) return <span key={i} className="text-faint">{ch}</span>;
@@ -93,7 +98,7 @@ export function AttemptReview({ target, typed, chars, errors, durationMs, result
         ) : (
           <p className="m-0 text-sm text-muted">Este intento se hizo antes de que la app guardara el texto escrito, así que no se puede mostrar la corrección.</p>
         )}
-        {typed && (
+        {typed && !stored && (
           <details className="text-sm">
             <summary className="cursor-pointer font-semibold text-accent">Ver el texto tal como se escribió</summary>
             <p className="m-0 mt-3 whitespace-pre-wrap rounded-xl bg-ground p-4 font-mono text-[15px] leading-relaxed">{typed}</p>

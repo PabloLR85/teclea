@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { TypingExercise } from "@/components/TypingExercise";
 import { startTest, submitTest } from "@/app/actions/alumno";
+import { submitFormTest } from "@/app/actions/formulario";
+import { FormExercise } from "@/components/FormExercise";
+import { findForm } from "@/lib/forms";
 
 export function TestRunner({
   testId,
@@ -30,6 +33,24 @@ export function TestRunner({
     else setError(r.error);
   }
 
+  const formId = text.startsWith("form:") ? text.slice(5) : null;
+  const form = formId ? findForm(formId) : null;
+
+  if (limitMs !== null && form) {
+    return (
+      <FormExercise
+        formId={form.id}
+        recordLimit={form.records.length}
+        mode="prueba"
+        limitMs={limitMs}
+        onSubmit={(p) => submitFormTest(testId, p)}
+        backHref="/pruebas"
+        reviewHref={`/pruebas/${testId}`}
+        showGrade
+      />
+    );
+  }
+
   if (limitMs !== null) {
     return (
       <TypingExercise
@@ -52,6 +73,7 @@ export function TestRunner({
         <li>Tienes {durationSec >= 60 ? `${Math.round(durationSec / 60)} minutos` : `${durationSec} segundos`} y un solo intento.</li>
         <li>El tiempo empieza a contar al pulsar el botón, aunque no escribas.</li>
         <li>Si recargas la página, el reloj sigue corriendo.</li>
+        {form && <li>Es un formulario: lee cada documento y graba sus datos. Pulsa Intro para pasar al siguiente registro.</li>}
         <li>Puntúan las pulsaciones netas: cada error resta. Respeta mayúsculas, tildes y signos.</li>
         <li>No se puede pegar texto.</li>
       </ul>

@@ -21,6 +21,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
           links={[
             { href: "/practicar", label: "Practicar" },
             { href: "/pruebas", label: "Pruebas" },
+            { href: "/carrera", label: "Carrera" },
             { href: "/ranking", label: "Ranking" },
           ]}
         />

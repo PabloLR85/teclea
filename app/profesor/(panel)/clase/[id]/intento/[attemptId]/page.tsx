@@ -4,6 +4,7 @@ import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
 import { requireTeacherClass } from "@/lib/session";
 import { evaluate, normalizeBaremo } from "@/lib/scoring";
 import { findLesson } from "@/lib/lessons";
+import { findForm } from "@/lib/forms";
 import { formatDateTime } from "@/lib/utils";
 import { AttemptReview } from "@/components/AttemptReview";
 import { allowRetake, validateAttempt } from "@/app/actions/profesor";
@@ -30,9 +31,15 @@ export default async function IntentoPage({ params }: { params: Promise<{ id: st
     title = test?.title ?? "Prueba";
     target = test?.content ?? "";
     backHref = `/profesor/clase/${id}?tab=resultados&prueba=${attempt.test_id}`;
+  } else if (attempt.race_id) {
+    const { data: r } = await db().from("races").select("title,content").eq("id", attempt.race_id).maybeSingle();
+    title = r ? `Carrera: ${r.title}` : "Carrera";
+    target = r?.content ?? "";
+    backHref = `/profesor/clase/${id}/carrera/${attempt.race_id}`;
   } else if (attempt.lesson_id) {
     const found = findLesson(attempt.lesson_id);
-    title = found ? `Lección ${found.lesson.id}: ${found.lesson.title}` : "Práctica";
+    const f = attempt.lesson_id.startsWith("form:") ? findForm(attempt.lesson_id.slice(5)) : null;
+    title = found ? `Lección ${found.lesson.id}: ${found.lesson.title}` : f ? `Formulario: ${f.title}` : "Práctica";
     target = found?.lesson.text ?? "";
   }
 

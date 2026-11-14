@@ -17,6 +17,10 @@ type Props = {
   reviewHref?: string;
   penalty: number;
   showGrade?: boolean;
+  // Carreras: avance en vivo y fin forzado cuando el profesor termina la carrera.
+  onProgress?: (p: { consumed: number; chars: number; errors: number }) => void;
+  forceFinish?: boolean;
+  hideKeyboard?: boolean;
 };
 
 function fmtTime(ms: number) {
@@ -24,7 +28,20 @@ function fmtTime(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, backHref, reviewHref, penalty, showGrade }: Props) {
+export function TypingExercise({
+  target,
+  mode,
+  limitMs,
+  onSubmit,
+  nextHref,
+  backHref,
+  reviewHref,
+  penalty,
+  showGrade,
+  onProgress,
+  forceFinish,
+  hideKeyboard,
+}: Props) {
   const [typed, setTyped] = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -68,6 +85,11 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
   }
 
   useEffect(() => {
+    if (forceFinish && !finishedRef.current) void finish(typed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceFinish]);
+
+  useEffect(() => {
     if (remaining !== null && remaining <= 0 && !finishedRef.current) void finish(typed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining]);
@@ -84,6 +106,7 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
     setTyped(value);
     // Termina cuando lo escrito llega al final del original (aunque se haya saltado o anadido algo).
     const a = align(target, value);
+    onProgress?.({ consumed: a.consumed, chars: value.length, errors: a.errors });
     if (a.consumed === target.length || value.length >= target.length + MAX_EXTRA) {
       void finish(value);
     }
@@ -248,7 +271,7 @@ export function TypingExercise({ target, mode, limitMs, onSubmit, nextHref, back
           )}
         </div>
 
-        {!done && <Keyboard next={next} />}
+        {!done && !hideKeyboard && <Keyboard next={next} />}
       </section>
 
       <aside className="flex flex-[1_1_260px] flex-col gap-4">
