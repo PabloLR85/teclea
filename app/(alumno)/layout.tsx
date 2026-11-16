@@ -23,6 +23,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
             { href: "/pruebas", label: "Pruebas" },
             { href: "/carrera", label: "Carrera" },
             { href: "/ranking", label: "Ranking" },
+            { href: "/puntuacion", label: "Puntuación" },
           ]}
         />
         <div className="flex items-center gap-3 text-sm text-muted">

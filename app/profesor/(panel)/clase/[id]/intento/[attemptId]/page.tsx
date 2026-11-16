@@ -2,12 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
 import { requireTeacherClass } from "@/lib/session";
-import { evaluate, normalizeBaremo } from "@/lib/scoring";
+import { evaluate, formatGrade, normalizeBaremo } from "@/lib/scoring";
+import { bestAttempt } from "@/lib/testRuns";
 import { findLesson } from "@/lib/lessons";
 import { findForm } from "@/lib/forms";
 import { formatDateTime } from "@/lib/utils";
 import { AttemptReview } from "@/components/AttemptReview";
-import { allowRetake, validateAttempt } from "@/app/actions/profesor";
+import { validateAttempt } from "@/app/actions/profesor";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -46,6 +47,20 @@ export default async function IntentoPage({ params }: { params: Promise<{ id: st
   const baremo = normalizeBaremo(klass.baremo);
   const result = evaluate(attempt, baremo);
 
+  // Otros intentos del mismo alumno en la misma prueba
+  let siblings: AttemptRow[] = [];
+  if (attempt.test_id) {
+    const { data: sib } = await db()
+      .from("attempts")
+      .select("*")
+      .eq("test_id", attempt.test_id)
+      .eq("student_id", attempt.student_id)
+      .eq("mode", "prueba")
+      .order("created_at", { ascending: true });
+    siblings = (sib ?? []) as AttemptRow[];
+  }
+  const best = bestAttempt(siblings, baremo);
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -62,13 +77,52 @@ export default async function IntentoPage({ params }: { params: Promise<{ id: st
               <button type="submit" className="btn btn-primary">Validar intento</button>
             </form>
           )}
-          {attempt.test_id && student && (
-            <form action={allowRetake.bind(null, id, attempt.test_id, student.id)}>
-              <button type="submit" className="btn btn-secondary">Permitir repetir</button>
-            </form>
-          )}
+
         </div>
       </div>
+      {siblings.length > 1 && (
+        <section className="card overflow-x-auto">
+          <h2 className="h2 m-0 px-5 pt-5">Intentos en esta prueba</h2>
+          <table className="mt-3 w-full min-w-[560px] border-collapse text-[15px]">
+            <thead>
+              <tr>
+                <th className="th">Intento</th>
+                <th className="th">Fecha</th>
+                <th className="th text-right">Netas/min</th>
+                <th className="th text-right">Precisión</th>
+                <th className="th text-right">Nota</th>
+                <th className="th"><span className="sr-only">Ver</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {siblings.map((x, i) => {
+                const e = evaluate(x, baremo);
+                const isCurrent = x.id === attempt.id;
+                return (
+                  <tr key={x.id} className={isCurrent ? "bg-accent-soft" : ""}>
+                    <td className="td font-medium">
+                      {i + 1}
+                      {best?.id === x.id && <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">Cuenta para la nota</span>}
+                      {x.flagged && <span className="ml-2 text-xs font-semibold text-error-ink">en revisión</span>}
+                    </td>
+                    <td className="td text-muted">{formatDateTime(x.created_at)}</td>
+                    <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
+                    <td className="td text-right font-mono">{e.accuracy} %</td>
+                    <td className="td text-right font-mono font-semibold">{formatGrade(e.grade)}</td>
+                    <td className="td text-right">
+                      {isCurrent ? (
+                        <span className="text-[13px] text-soft">Viendo</span>
+                      ) : (
+                        <Link href={`/profesor/clase/${id}/intento/${x.id}`} className="font-semibold text-accent">Ver</Link>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
       <AttemptReview
         target={target}
         typed={attempt.typed}

@@ -38,7 +38,8 @@ create table if not exists tests (
   class_id uuid not null references classes(id) on delete cascade,
   title text not null,
   content text not null,
-  duration_sec int not null check (duration_sec between 30 and 1800),
+  duration_sec int check (duration_sec is null or duration_sec between 30 and 10800), -- vacio = sin limite
+  max_attempts int check (max_attempts is null or max_attempts >= 1), -- vacio = ilimitados
   opens_at timestamptz not null,
   closes_at timestamptz not null,
   created_at timestamptz not null default now()
@@ -66,18 +67,18 @@ create table if not exists attempts (
 -- Para bases creadas con la primera version
 alter table attempts add column if not exists typed text;
 
-create unique index if not exists attempts_one_per_test
-  on attempts (student_id, test_id) where mode = 'prueba';
 create index if not exists attempts_class_created on attempts (class_id, created_at desc);
 create index if not exists attempts_student_created on attempts (student_id, created_at desc);
 
--- Momento en que cada alumno empieza una prueba: evita reiniciarla para repetir.
+-- Cada intento de prueba: cuando empezo y si ya se entrego.
 create table if not exists test_sessions (
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references students(id) on delete cascade,
   test_id uuid not null references tests(id) on delete cascade,
   started_at timestamptz not null default now(),
-  primary key (student_id, test_id)
+  submitted boolean not null default false
 );
+create index if not exists test_sessions_student_test on test_sessions (student_id, test_id);
 
 create table if not exists lesson_progress (
   student_id uuid not null references students(id) on delete cascade,

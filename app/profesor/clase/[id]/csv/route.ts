@@ -3,6 +3,7 @@ import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
 import { getTeacher } from "@/lib/session";
 import { evaluate, normalizeBaremo } from "@/lib/scoring";
 import { getRanking } from "@/lib/ranking";
+import { bestAttempt } from "@/lib/testRuns";
 import { ALL_LESSONS } from "@/lib/lessons";
 
 export const dynamic = "force-dynamic";
@@ -48,18 +49,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!t) return new NextResponse("Prueba no encontrada", { status: 404 });
     const test = t as TestRow;
     const { data: att } = await db().from("attempts").select("*").eq("test_id", testId).eq("mode", "prueba");
-    const byStudent = new Map(((att ?? []) as AttemptRow[]).map((a) => [a.student_id, a]));
-    rows = [["Alumno", "Usuario", "Pulsaciones", "Errores", "Brutas/min", "Netas/min", "Precisión %", "Nota", "Estado"]];
+    // Para la nota cuenta el mejor intento de cada alumno
+    const lists = new Map<string, AttemptRow[]>();
+    for (const a of (att ?? []) as AttemptRow[]) lists.set(a.student_id, [...(lists.get(a.student_id) ?? []), a]);
+    const byStudent = new Map<string, AttemptRow>();
+    for (const [sid, list] of lists) {
+      const b = bestAttempt(list, baremo);
+      if (b) byStudent.set(sid, b);
+    }
+    rows = [["Alumno", "Usuario", "Intentos entregados", "Pulsaciones", "Errores", "Brutas/min", "Netas/min", "Precisión %", "Nota (mejor intento)", "Estado"]];
     for (const s of students) {
       const a = byStudent.get(s.id);
       if (!a) {
-        rows.push([s.full_name, s.username, "", "", "", "", "", "", "Sin entregar"]);
+        rows.push([s.full_name, s.username, 0, "", "", "", "", "", "", "Sin entregar"]);
         continue;
       }
       const e = evaluate(a, baremo);
       rows.push([
         s.full_name,
         s.username,
+        lists.get(s.id)?.length ?? 0,
         a.chars,
         a.errors,
         num(e.grossPpm),

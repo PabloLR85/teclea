@@ -7,6 +7,7 @@ import { endStudentSession, requireStudent, startStudentSession } from "@/lib/se
 import { checkEvents, computeScore, evaluate, MAX_EXTRA, normalizeBaremo, type InputEvent } from "@/lib/scoring";
 import { findLesson, isUnlocked, PASS_ACCURACY } from "@/lib/lessons";
 import { insertAttempt, sanitize, type SubmitPayload, type SubmitResult } from "@/lib/attempts";
+import { closeRun, reopenRun, startRun, type StartResult } from "@/lib/testRuns";
 
 export type { SubmitPayload, SubmitResult };
 
@@ -121,66 +122,27 @@ async function loadTest(testId: string, classId: string): Promise<TestRow | null
   return (data as TestRow) ?? null;
 }
 
-export type StartResult = { ok: true; remainingMs: number } | { ok: false; error: string };
+export type { StartResult };
 
 export async function startTest(testId: string): Promise<StartResult> {
   const { student, klass } = await requireStudent();
   const test = await loadTest(testId, klass.id);
   if (!test) return { ok: false, error: "Prueba no encontrada." };
-  const now = Date.now();
-  if (now < Date.parse(test.opens_at)) return { ok: false, error: "La prueba todavía no está abierta." };
-  if (now > Date.parse(test.closes_at)) return { ok: false, error: "La prueba ya está cerrada." };
-
-  const { data: done } = await db()
-    .from("attempts")
-    .select("id")
-    .eq("student_id", student.id)
-    .eq("test_id", testId)
-    .eq("mode", "prueba")
-    .maybeSingle();
-  if (done) return { ok: false, error: "Ya has entregado esta prueba." };
-
-  const { data: existing } = await db()
-    .from("test_sessions")
-    .select("started_at")
-    .eq("student_id", student.id)
-    .eq("test_id", testId)
-    .maybeSingle();
-  let startedAt = now;
-  if (existing) {
-    startedAt = Date.parse(existing.started_at);
-  } else {
-    const { error } = await db().from("test_sessions").insert({ student_id: student.id, test_id: testId });
-    if (error) return { ok: false, error: "No se pudo iniciar la prueba. Vuelve a intentarlo." };
-  }
-  const remainingMs = test.duration_sec * 1000 - (now - startedAt);
-  if (remainingMs <= 0) return { ok: false, error: "El tiempo de esta prueba se ha agotado." };
-  return { ok: true, remainingMs };
+  return startRun(student.id, test);
 }
 
 export async function submitTest(testId: string, payload: SubmitPayload): Promise<SubmitResult> {
   const { student, klass } = await requireStudent();
   const test = await loadTest(testId, klass.id);
-  if (!test) return { ok: false, error: "Prueba no encontrada." };
-
-  const { data: session } = await db()
-    .from("test_sessions")
-    .select("started_at")
-    .eq("student_id", student.id)
-    .eq("test_id", testId)
-    .maybeSingle();
-  if (!session) return { ok: false, error: "La prueba no se había iniciado." };
+  if (!test || test.content.startsWith("form:")) return { ok: false, error: "Prueba no encontrada." };
 
   const p = sanitize(payload, test.content.length + MAX_EXTRA);
   if (!p) return { ok: false, error: "Datos de la prueba no válidos." };
 
-  // El tiempo que cuenta lo pone el servidor: desde que empezo hasta ahora, con un margen de red.
-  const serverElapsed = Date.now() - Date.parse(session.started_at);
-  const limitMs = test.duration_sec * 1000;
-  let flagged: string | null = null;
-  if (serverElapsed > limitMs + 15000) flagged = "entregada fuera de tiempo";
-  const durationMs = Math.min(Math.max(p.durationMs, 1000), limitMs);
-  flagged = flagged ?? checkEvents(p.events, p.typed.length, durationMs);
+  const run = await closeRun(student.id, test, p.durationMs);
+  if (!run.ok) return run;
+  const durationMs = run.durationMs;
+  const flagged = run.flagged ?? checkEvents(p.events, p.typed.length, durationMs);
 
   const baremo = normalizeBaremo(klass.baremo);
   const s = computeScore(test.content, p.typed, durationMs, baremo.penalty);
@@ -201,10 +163,8 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
   });
   if (error) {
     console.error("submitTest", error);
-    return {
-      ok: false,
-      error: error.code === "23505" ? "Esta prueba ya estaba entregada." : "No se pudo guardar la prueba. Avisa al profesor antes de cerrar la página.",
-    };
+    await reopenRun(run.sessionId);
+    return { ok: false, error: "No se pudo guardar la prueba. Vuelve a pulsar entregar o avisa al profesor antes de cerrar la página." };
   }
   revalidatePath("/pruebas");
   // Mismo calculo que veran despues el alumno y el profesor

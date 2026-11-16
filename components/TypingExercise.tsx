@@ -21,6 +21,8 @@ type Props = {
   onProgress?: (p: { consumed: number; chars: number; errors: number }) => void;
   forceFinish?: boolean;
   hideKeyboard?: boolean;
+  elapsedOffsetMs?: number; // prueba retomada: tiempo que ya habia pasado
+  allowEarlySubmit?: boolean; // boton para entregar antes de terminar
 };
 
 function fmtTime(ms: number) {
@@ -41,6 +43,8 @@ export function TypingExercise({
   onProgress,
   forceFinish,
   hideKeyboard,
+  elapsedOffsetMs = 0,
+  allowEarlySubmit,
 }: Props) {
   const target = useMemo(() => targetRaw.normalize("NFC"), [targetRaw]);
   const [typed, setTyped] = useState("");
@@ -53,7 +57,7 @@ export function TypingExercise({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const textBoxRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  const clockStart = useRef<number | null>(mode === "prueba" ? Date.now() : null);
+  const clockStart = useRef<number | null>(mode === "prueba" ? Date.now() - elapsedOffsetMs : null);
 
   // En prueba el reloj corre desde que se pulsa Empezar, no desde la primera tecla.
   useEffect(() => {
@@ -233,6 +237,14 @@ export function TypingExercise({
             />
           </div>
 
+          {allowEarlySubmit && !done && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => void finish(typed)} disabled={typed.length === 0} className="btn btn-secondary">
+                Entregar ahora
+              </button>
+              <span className="text-[13px] text-soft">Si terminas de copiar el texto, se entrega solo.</span>
+            </div>
+          )}
           {sending && <p className="text-sm text-muted">Guardando resultado...</p>}
 
           {result && !result.ok && (

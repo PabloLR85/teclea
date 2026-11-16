@@ -124,7 +124,7 @@ export async function deleteStudent(classId: string, studentId: string) {
 
 // ---------- Pruebas ----------
 
-type ParsedTest = { title: string; content: string; duration_sec: number; opens_at: string; closes_at: string };
+type ParsedTest = { title: string; content: string; duration_sec: number | null; max_attempts: number | null; opens_at: string; closes_at: string };
 
 function parseTestForm(form: FormData): ParsedTest | { error: string } {
   const title = String(form.get("title") ?? "").trim();
@@ -138,18 +138,31 @@ function parseTestForm(form: FormData): ParsedTest | { error: string } {
           .replace(/\r?\n+/g, " ")
           .replace(/\s+/g, " ")
           .trim();
+  const timeMode = String(form.get("time_mode") ?? "limit");
   const durationMin = Number(String(form.get("duration") ?? "").replace(",", "."));
+  const attemptsMode = String(form.get("attempts_mode") ?? "free");
+  const maxAttempts = Math.floor(Number(form.get("max_attempts") ?? ""));
   const opens = String(form.get("opens") ?? "");
   const closes = String(form.get("closes") ?? "");
   if (!title) return { error: "Pon un título a la prueba." };
   if (kind === "formulario" && !findForm(formId)) return { error: "Elige un formulario." };
   if (kind !== "formulario" && content.length < 50) return { error: "El texto debe tener al menos 50 caracteres." };
-  if (!Number.isFinite(durationMin) || durationMin < 0.5 || durationMin > 30) return { error: "La duración debe estar entre 0,5 y 30 minutos." };
+  if (timeMode !== "free" && (!Number.isFinite(durationMin) || durationMin < 0.5 || durationMin > 180))
+    return { error: "La duración debe estar entre 0,5 y 180 minutos." };
+  if (attemptsMode === "exam" && (!Number.isFinite(maxAttempts) || maxAttempts < 1 || maxAttempts > 20))
+    return { error: "El número de intentos debe estar entre 1 y 20." };
   if (!opens || !closes) return { error: "Indica cuándo se abre y cuándo se cierra." };
   const opens_at = madridLocalToIso(opens);
   const closes_at = madridLocalToIso(closes);
   if (Date.parse(closes_at) <= Date.parse(opens_at)) return { error: "El cierre debe ser posterior a la apertura." };
-  return { title, content, duration_sec: Math.round(durationMin * 60), opens_at, closes_at };
+  return {
+    title,
+    content,
+    duration_sec: timeMode === "free" ? null : Math.round(durationMin * 60),
+    max_attempts: attemptsMode === "exam" ? maxAttempts : null,
+    opens_at,
+    closes_at,
+  };
 }
 
 export async function createTest(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
@@ -157,7 +170,10 @@ export async function createTest(classId: string, _prev: FormState, form: FormDa
   const parsed = parseTestForm(form);
   if ("error" in parsed) return parsed;
   const { error } = await db().from("tests").insert({ class_id: classId, ...parsed });
-  if (error) return { error: "No se pudo crear la prueba." };
+  if (error) {
+    console.error("createTest", error);
+    return { error: "No se pudo crear la prueba. Si acabas de actualizar la app, comprueba que ejecutaste supabase/migracion-4.sql en Supabase." };
+  }
   revalidatePath(`/profesor/clase/${classId}`);
   return { ok: "Prueba creada." };
 }
@@ -172,14 +188,18 @@ export async function updateTest(classId: string, testId: string, _prev: FormSta
     form.set("kind", String(current.content).startsWith("form:") ? "formulario" : "texto");
     form.set("form_id", String(current.content).startsWith("form:") ? String(current.content).slice(5) : "");
     form.set("content", String(current.content));
-    form.set("duration", String(current.duration_sec / 60));
+    form.set("time_mode", current.duration_sec === null ? "free" : "limit");
+    form.set("duration", String((current.duration_sec ?? 300) / 60));
   }
   const parsed = parseTestForm(form);
   if ("error" in parsed) return parsed;
   const { error } = await db().from("tests").update(parsed).eq("id", testId).eq("class_id", classId);
-  if (error) return { error: "No se pudieron guardar los cambios." };
+  if (error) {
+    console.error("updateTest", error);
+    return { error: "No se pudieron guardar los cambios. Si acabas de actualizar la app, comprueba que ejecutaste supabase/migracion-4.sql en Supabase." };
+  }
   revalidatePath(`/profesor/clase/${classId}`);
-  return { ok: locked ? "Cambios guardados. El texto y la duración no se han tocado porque ya hay alumnos que la han hecho." : "Cambios guardados." };
+  return { ok: locked ? "Cambios guardados. El texto y el tiempo no se han tocado porque ya hay alumnos que la han hecho." : "Cambios guardados." };
 }
 
 // ---------- Clase y alumnos: edicion ----------
@@ -222,6 +242,7 @@ export async function allowRetake(classId: string, testId: string, studentId: st
   await requireTeacherClass(classId);
   await db().from("attempts").delete().eq("test_id", testId).eq("student_id", studentId).eq("class_id", classId).eq("mode", "prueba");
   await db().from("test_sessions").delete().eq("test_id", testId).eq("student_id", studentId);
+  // Reinicia los intentos de ese alumno en esta prueba (se borran sus entregas)
   revalidatePath(`/profesor/clase/${classId}`);
   redirect(`/profesor/clase/${classId}?tab=resultados&prueba=${testId}`);
 }

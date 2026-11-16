@@ -2,80 +2,134 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type TestRow } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
-import { evaluate, normalizeBaremo } from "@/lib/scoring";
+import { evaluate, formatGrade, normalizeBaremo } from "@/lib/scoring";
 import { formatDateTime } from "@/lib/utils";
+import { attemptsLabel, bestAttempt, durationLabel, getRunState } from "@/lib/testRuns";
 import { AttemptReview } from "@/components/AttemptReview";
 import { TestRunner } from "./TestRunner";
 
-export default async function PruebaPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PruebaPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ intento?: string }>;
+}) {
   const { id } = await params;
+  const { intento } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { student, klass } = await requireStudent();
   const { data } = await db().from("tests").select("*").eq("id", id).eq("class_id", klass.id).maybeSingle();
   if (!data) notFound();
-  const test = data as TestRow;
+  const test = { max_attempts: null, ...data } as TestRow;
   const baremo = normalizeBaremo(klass.baremo);
 
-  const { data: doneData } = await db()
-    .from("attempts")
-    .select("*")
-    .eq("student_id", student.id)
-    .eq("test_id", id)
-    .eq("mode", "prueba")
-    .maybeSingle();
-  const done = doneData as AttemptRow | null;
-
-  const minutes = test.duration_sec / 60;
-  const header = (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="flex flex-col gap-1">
-        <span className="kicker">Prueba · {Number.isInteger(minutes) ? `${minutes} min` : `${test.duration_sec} s`}</span>
-        <h1 className="h1 m-0">{test.title}</h1>
-        {done && <span className="text-sm text-muted">Entregada el {formatDateTime(done.created_at)}</span>}
-      </div>
-      <Link href="/pruebas" className="btn btn-secondary">Volver</Link>
-    </div>
-  );
-
-  if (done) {
-    return (
-      <>
-        {header}
-        <AttemptReview
-          target={test.content}
-          typed={done.typed}
-          chars={done.chars}
-          errors={done.errors}
-          durationMs={done.duration_ms}
-          result={evaluate(done, baremo)}
-          showGrade
-          flagged={done.flagged ? done.flag_reason ?? "pendiente de revisar" : null}
-        />
-      </>
-    );
-  }
-
-  const { data: session } = await db()
-    .from("test_sessions")
-    .select("started_at")
-    .eq("student_id", student.id)
-    .eq("test_id", id)
-    .maybeSingle();
-
-  const now = Date.now();
-  let blocked: string | null = null;
-  if (now < Date.parse(test.opens_at)) blocked = `La prueba se abre el ${formatDateTime(test.opens_at)}.`;
-  else if (now > Date.parse(test.closes_at)) blocked = "La prueba ya está cerrada y no la entregaste.";
-  else if (session && now - Date.parse(session.started_at) > test.duration_sec * 1000 + 15000)
-    blocked = "El tiempo de esta prueba se agotó sin entrega. Habla con tu profesor.";
+  const [{ data: attData }, run] = await Promise.all([
+    db().from("attempts").select("*").eq("student_id", student.id).eq("test_id", id).eq("mode", "prueba").order("created_at", { ascending: true }),
+    getRunState(student.id, test),
+  ]);
+  const attempts = (attData ?? []) as AttemptRow[];
+  const best = bestAttempt(attempts, baremo);
+  // Correccion que se muestra: la elegida, o la del ultimo intento
+  const shown = attempts.find((a) => a.id === intento) ?? (run.inProgress ? null : attempts[attempts.length - 1] ?? null);
 
   return (
     <>
-      {header}
-      {blocked ? (
-        <div className="card p-8 text-[15px] text-muted">{blocked}</div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <span className="kicker">
+            {durationLabel(test.duration_sec)} · {attemptsLabel(test.max_attempts)}
+          </span>
+          <h1 className="h1 m-0">{test.title}</h1>
+          <span className="text-sm text-muted">Abierta hasta el {formatDateTime(test.closes_at)}</span>
+        </div>
+        <Link href="/pruebas" className="btn btn-secondary">Volver</Link>
+      </div>
+
+      {run.canStart ? (
+        <TestRunner
+          testId={test.id}
+          text={test.content}
+          durationSec={test.duration_sec}
+          resumed={!!run.inProgress}
+          penalty={baremo.penalty}
+          attemptNumber={run.used + (run.inProgress ? 0 : 1)}
+          attemptsLeft={run.left}
+        />
       ) : (
-        <TestRunner testId={test.id} text={test.content} durationSec={test.duration_sec} resumed={!!session} penalty={baremo.penalty} />
+        <div className="card p-6 text-[15px] text-muted">{run.reason}</div>
+      )}
+
+      {attempts.length > 0 && (
+        <section className="card overflow-x-auto">
+          <div className="flex flex-wrap items-baseline justify-between gap-3 px-5 pt-5">
+            <h2 className="h2 m-0">Tus intentos</h2>
+            {best && (
+              <span className="text-[15px] text-muted">
+                Nota que cuenta: <strong className="font-display text-xl text-ink">{formatGrade(evaluate(best, baremo).grade)}</strong> (mejor intento)
+              </span>
+            )}
+          </div>
+          <table className="mt-3 w-full min-w-[560px] border-collapse text-[15px]">
+            <thead>
+              <tr>
+                <th className="th">Intento</th>
+                <th className="th">Fecha</th>
+                <th className="th text-right">Netas/min</th>
+                <th className="th text-right">Precisión</th>
+                <th className="th text-right">Nota</th>
+                <th className="th"><span className="sr-only">Corrección</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {attempts.map((a, i) => {
+                const e = evaluate(a, baremo);
+                const isShown = shown?.id === a.id;
+                return (
+                  <tr key={a.id} className={isShown ? "bg-accent-soft" : ""}>
+                    <td className="td font-medium">
+                      {i + 1}
+                      {best?.id === a.id && attempts.length > 1 && (
+                        <span className="ml-2 rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">Mejor</span>
+                      )}
+                      {a.flagged && <span className="ml-2 text-xs font-semibold text-error-ink">en revisión</span>}
+                    </td>
+                    <td className="td text-muted">{formatDateTime(a.created_at)}</td>
+                    <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
+                    <td className="td text-right font-mono">{e.accuracy} %</td>
+                    <td className="td text-right font-mono font-semibold">{formatGrade(e.grade)}</td>
+                    <td className="td text-right">
+                      {isShown ? (
+                        <span className="text-[13px] text-soft">Abajo</span>
+                      ) : (
+                        <Link href={`/pruebas/${id}?intento=${a.id}`} className="font-semibold text-accent">Ver corrección</Link>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {shown && (
+        <section className="flex flex-col gap-3">
+          <h2 className="h2 m-0">
+            Corrección del intento {attempts.findIndex((a) => a.id === shown.id) + 1}
+            <span className="ml-2 text-sm font-normal text-muted">{formatDateTime(shown.created_at)}</span>
+          </h2>
+          <AttemptReview
+            target={test.content}
+            typed={shown.typed}
+            chars={shown.chars}
+            errors={shown.errors}
+            durationMs={shown.duration_ms}
+            result={evaluate(shown, baremo)}
+            showGrade
+            flagged={shown.flagged ? shown.flag_reason ?? "pendiente de revisar" : null}
+          />
+        </section>
       )}
     </>
   );

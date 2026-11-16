@@ -24,6 +24,8 @@ import { createRace } from "@/app/actions/carrera";
 import { racePhase, type RaceRow } from "@/lib/races";
 import { TextPicker } from "@/components/TextPicker";
 import { TestContentFields } from "@/components/TestContentFields";
+import { TestRulesFields } from "@/components/TestRulesFields";
+import { attemptsLabel, bestAttempt, durationLabel } from "@/lib/testRuns";
 import { findForm } from "@/lib/forms";
 
 type Tab = "alumnos" | "pruebas" | "resultados" | "carreras" | "baremo";
@@ -214,10 +216,12 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
   const { data } = await db().from("tests").select("*").eq("class_id", classId).order("opens_at", { ascending: false });
   const tests = (data ?? []) as TestRow[];
   const { data: att } = tests.length
-    ? await db().from("attempts").select("test_id").eq("mode", "prueba").in("test_id", tests.map((t) => t.id))
-    : { data: [] as { test_id: string }[] };
-  const delivered = new Map<string, number>();
-  for (const a of att ?? []) delivered.set(a.test_id, (delivered.get(a.test_id) ?? 0) + 1);
+    ? await db().from("attempts").select("test_id,student_id").eq("mode", "prueba").in("test_id", tests.map((t) => t.id))
+    : { data: [] as { test_id: string; student_id: string }[] };
+  // Alumnos distintos que han entregado al menos un intento
+  const deliveredSets = new Map<string, Set<string>>();
+  for (const a of att ?? []) deliveredSets.set(a.test_id, (deliveredSets.get(a.test_id) ?? new Set()).add(a.student_id));
+  const delivered = new Map([...deliveredSets].map(([k, v]) => [k, v.size]));
   const now = Date.now();
   const defaultOpen = isoToMadridLocal(new Date(Math.ceil(now / 900000) * 900000).toISOString());
   const defaultClose = isoToMadridLocal(new Date(Math.ceil(now / 900000) * 900000 + 2 * 3600000).toISOString());
@@ -235,12 +239,12 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
                 <div className="flex flex-col gap-1">
                   <span className="text-base font-semibold">{t.title}</span>
                   <span className="text-sm text-muted">
-                    {t.duration_sec % 60 === 0 ? `${t.duration_sec / 60} min` : `${t.duration_sec} s`} ·{" "}
+                    {durationLabel(t.duration_sec)} · {attemptsLabel(t.max_attempts)} ·{" "}
                     {t.content.startsWith("form:") ? `Formulario: ${findForm(t.content.slice(5))?.title ?? ""}` : `${t.content.length} caracteres`} · de{" "}
                     {formatDateTime(t.opens_at)} a {formatDateTime(t.closes_at)}
                   </span>
                   <span className={`text-[13px] font-semibold ${open ? "text-accent" : "text-soft"}`}>
-                    {open ? "Abierta" : upcoming ? "Programada" : "Cerrada"} · {delivered.get(t.id) ?? 0} de {studentCount} entregadas
+                    {open ? "Abierta" : upcoming ? "Programada" : "Cerrada"} · {delivered.get(t.id) ?? 0} de {studentCount} alumnos han entregado
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -275,10 +279,7 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
             <input id="title" name="title" required placeholder="Prueba 1 · Fila guía" className="field" />
           </div>
           <TestContentFields />
-          <div className="flex flex-col gap-2">
-            <label htmlFor="duration" className="label">Duración (minutos)</label>
-            <input id="duration" name="duration" type="number" min={0.5} max={30} step={0.5} defaultValue={3} required className="field" />
-          </div>
+          <TestRulesFields />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <label htmlFor="opens" className="label">Se abre</label>
@@ -289,7 +290,7 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
               <input id="closes" name="closes" type="datetime-local" defaultValue={defaultClose} required className="field text-sm" />
             </div>
           </div>
-          <span className="text-[13px] text-soft">Hora peninsular. Cada alumno tiene un solo intento dentro de esa franja.</span>
+          <span className="text-[13px] text-soft">Hora peninsular. Fuera de esa franja no se puede empezar la prueba.</span>
         </ActionForm>
       </aside>
     </div>
@@ -309,17 +310,29 @@ async function ResultadosTab({
   baremo: Baremo;
   selected?: string;
 }) {
-  const { data } = await db().from("tests").select("id,title,opens_at,duration_sec").eq("class_id", classId).order("opens_at", { ascending: false });
-  const tests = (data ?? []) as Pick<TestRow, "id" | "title" | "opens_at" | "duration_sec">[];
+  const { data } = await db().from("tests").select("id,title,opens_at,duration_sec,max_attempts").eq("class_id", classId).order("opens_at", { ascending: false });
+  const tests = (data ?? []) as Pick<TestRow, "id" | "title" | "opens_at" | "duration_sec" | "max_attempts">[];
   if (tests.length === 0) return <div className="card p-8 text-muted">Cuando crees una prueba, aquí verás las entregas y las notas.</div>;
   const test = tests.find((t) => t.id === selected) ?? tests[0];
 
   const [{ data: att }, { data: sessions }] = await Promise.all([
     db().from("attempts").select("*").eq("test_id", test.id).eq("mode", "prueba"),
-    db().from("test_sessions").select("student_id").eq("test_id", test.id),
+    db().from("test_sessions").select("student_id,submitted").eq("test_id", test.id),
   ]);
-  const byStudent = new Map(((att ?? []) as AttemptRow[]).map((a) => [a.student_id, a]));
-  const started = new Set((sessions ?? []).map((s) => s.student_id as string));
+  // Todos los intentos de cada alumno; para la nota cuenta el mejor
+  const attemptsBy = new Map<string, AttemptRow[]>();
+  for (const a of (att ?? []) as AttemptRow[]) attemptsBy.set(a.student_id, [...(attemptsBy.get(a.student_id) ?? []), a]);
+  const byStudent = new Map<string, AttemptRow>();
+  for (const [sid, list] of attemptsBy) {
+    const b = bestAttempt(list, baremo);
+    if (b) byStudent.set(sid, b);
+  }
+  const used = new Map<string, number>();
+  const pending = new Set<string>();
+  for (const x of sessions ?? []) {
+    used.set(x.student_id, (used.get(x.student_id) ?? 0) + 1);
+    if (!x.submitted) pending.add(x.student_id);
+  }
 
   const graded = [...byStudent.values()].filter((a) => !a.flagged).map((a) => evaluate(a, baremo).grade);
   const avg = graded.length ? graded.reduce((x, y) => x + y, 0) / graded.length : null;
@@ -359,8 +372,9 @@ async function ResultadosTab({
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="card flex flex-col gap-1 p-[18px]">
-          <span className="text-[13px] text-muted">Entregadas</span>
+          <span className="text-[13px] text-muted">Alumnos con entrega</span>
           <span className="font-display text-[28px] font-bold">{byStudent.size} / {students.length}</span>
+          <span className="text-[13px] text-soft">{durationLabel(test.duration_sec)} · {attemptsLabel(test.max_attempts)}</span>
         </div>
         <div className="card flex flex-col gap-1 p-[18px]">
           <span className="text-[13px] text-muted">Nota media</span>
@@ -377,6 +391,7 @@ async function ResultadosTab({
           <thead>
             <tr>
               <th className="th">Alumno</th>
+              <th className="th text-right">Intentos</th>
               <th className="th text-right">Brutas/min</th>
               <th className="th text-right">Errores</th>
               <th className="th text-right">Precisión</th>
@@ -396,6 +411,10 @@ async function ResultadosTab({
                     {s.full_name}
                     {a?.flagged && <span className="mt-0.5 block text-xs font-semibold text-error-ink">En revisión: {a.flag_reason}</span>}
                   </td>
+                  <td className="td text-right font-mono">
+                    {used.get(s.id) ?? 0}
+                    {test.max_attempts !== null ? `/${test.max_attempts}` : ""}
+                  </td>
                   <td className="td text-right font-mono">{ev ? Math.round(ev.grossPpm) : "-"}</td>
                   <td className="td text-right font-mono">{a ? a.errors : "-"}</td>
                   <td className="td text-right font-mono">{ev ? `${ev.accuracy} %` : "-"}</td>
@@ -410,7 +429,7 @@ async function ResultadosTab({
                         {formatGrade(grade)}
                       </span>
                     ) : (
-                      <span className="text-[13px] text-soft">{started.has(s.id) ? "Empezada sin entregar" : "Sin entregar"}</span>
+                      <span className="text-[13px] text-soft">{pending.has(s.id) ? "Haciéndola o sin entregar" : "Sin entregar"}</span>
                     )}
                   </td>
                   <td className="td">
@@ -425,10 +444,16 @@ async function ResultadosTab({
                           <button type="submit" className="btn btn-secondary h-9 px-3 text-[13px]">Validar</button>
                         </form>
                       )}
-                      {(a || started.has(s.id)) && (
-                        <form action={allowRetake.bind(null, classId, test.id, s.id)}>
-                          <button type="submit" className="btn btn-secondary h-9 px-3 text-[13px]">Permitir repetir</button>
-                        </form>
+                      {test.max_attempts !== null && (used.get(s.id) ?? 0) > 0 && (
+                        <details className="relative">
+                          <summary className="btn btn-secondary h-9 cursor-pointer list-none px-3 text-[13px]">Reiniciar intentos</summary>
+                          <div className="absolute right-0 z-10 mt-2 flex w-72 flex-col gap-3 rounded-xl border border-line bg-white p-4 text-left text-sm shadow-lg">
+                            <span>Se borrarán los {used.get(s.id)} intentos de {s.full_name} en este examen y volverá a tener {test.max_attempts}.</span>
+                            <form action={allowRetake.bind(null, classId, test.id, s.id)}>
+                              <button type="submit" className="btn h-9 bg-error px-3 text-[13px] text-white">Sí, reiniciar</button>
+                            </form>
+                          </div>
+                        </details>
                       )}
                     </div>
                   </td>
@@ -439,7 +464,7 @@ async function ResultadosTab({
         </table>
       </div>
       <p className="m-0 text-[13px] text-soft">
-        Notas calculadas con el baremo actual: 5 desde {baremo.min5} netas/min, 10 desde {baremo.max10}, precisión mínima {baremo.minAcc} % y {baremo.penalty} pulsaciones de penalización por error. &laquo;Permitir repetir&raquo; borra la entrega de ese alumno.
+        Notas calculadas con el baremo actual: 5 desde {baremo.min5} netas/min, 10 desde {baremo.max10}, precisión mínima {baremo.minAcc} % y {baremo.penalty} pulsaciones de penalización por error. Cada fila muestra el mejor intento del alumno; con &laquo;Ver&raquo; tienes todos.
       </p>
     </div>
   );

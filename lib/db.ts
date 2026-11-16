@@ -41,7 +41,8 @@ export type TestRow = {
   class_id: string;
   title: string;
   content: string;
-  duration_sec: number;
+  duration_sec: number | null; // null = sin limite de tiempo
+  max_attempts: number | null; // null = intentos ilimitados
   opens_at: string;
   closes_at: string;
   created_at: string;

@@ -5,6 +5,7 @@ import { db, type TestRow } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
 import { checkEvents, evaluate, normalizeBaremo, normalizeTyped, type InputEvent } from "@/lib/scoring";
 import { insertAttempt, type SubmitResult } from "@/lib/attempts";
+import { closeRun, reopenRun } from "@/lib/testRuns";
 import { findForm, PRACTICE_RECORDS, rejectionErrors, scoreForm, type FormAnswers, type FormRejection, type FormTemplate, type StoredForm } from "@/lib/forms";
 
 type Payload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number; rejections?: FormRejection[] };
@@ -69,22 +70,13 @@ export async function submitFormTest(testId: string, payload: Payload): Promise<
   const t = findForm(test.content.slice(5));
   if (!t) return { ok: false, error: "Formulario no encontrado." };
 
-  const { data: session } = await db()
-    .from("test_sessions")
-    .select("started_at")
-    .eq("student_id", student.id)
-    .eq("test_id", testId)
-    .maybeSingle();
-  if (!session) return { ok: false, error: "La prueba no se había iniciado." };
-
   const p = clean(payload, t, t.records.length);
   if (!p) return { ok: false, error: "Datos de la prueba no válidos." };
 
-  const serverElapsed = Date.now() - Date.parse(session.started_at);
-  const limitMs = test.duration_sec * 1000;
-  let flagged: string | null = serverElapsed > limitMs + 15000 ? "entregada fuera de tiempo" : null;
-  const durationMs = Math.min(Math.max(p.durationMs, 1000), limitMs);
-  flagged = flagged ?? checkEvents(p.events, typedLength(p.answers), durationMs);
+  const run = await closeRun(student.id, test, p.durationMs);
+  if (!run.ok) return run;
+  const durationMs = run.durationMs;
+  const flagged = run.flagged ?? checkEvents(p.events, typedLength(p.answers), durationMs);
 
   const baremo = normalizeBaremo(klass.baremo);
   const s = scoreForm(t, p.answers, p.submitted);
@@ -107,10 +99,8 @@ export async function submitFormTest(testId: string, payload: Payload): Promise<
   });
   if (error) {
     console.error("submitFormTest", error);
-    return {
-      ok: false,
-      error: error.code === "23505" ? "Esta prueba ya estaba entregada." : "No se pudo guardar la prueba. Avisa al profesor antes de cerrar la página.",
-    };
+    await reopenRun(run.sessionId);
+    return { ok: false, error: "No se pudo guardar la prueba. Vuelve a pulsar entregar o avisa al profesor antes de cerrar la página." };
   }
   revalidatePath("/pruebas");
   return { ok: true, chars: s.chars, errors: s.errors, netPpm: e.netPpm, grossPpm: e.grossPpm, accuracy: e.accuracy, flagged, grade: e.grade };

@@ -6,6 +6,7 @@ import { testHasActivity } from "@/lib/tests";
 import { isoToMadridLocal } from "@/lib/utils";
 import { ActionForm } from "@/components/ActionForm";
 import { TestContentFields } from "@/components/TestContentFields";
+import { TestRulesFields } from "@/components/TestRulesFields";
 import { deleteTest, updateTest } from "@/app/actions/profesor";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -30,7 +31,7 @@ export default async function EditarPruebaPage({ params }: { params: Promise<{ i
 
       {locked && (
         <p className="m-0 rounded-xl bg-accent-soft px-5 py-4 text-[15px] leading-relaxed text-accent-ink">
-          Ya hay alumnos que han empezado o entregado esta prueba, así que el texto y la duración están bloqueados: si cambiaran, unos se evaluarían con un texto y otros con otro. Puedes cambiar el título y la franja horaria. Si necesitas otro texto, crea una prueba nueva.
+          Ya hay alumnos que han empezado o entregado esta prueba, así que el texto y el tiempo están bloqueados: si cambiaran, unos se evaluarían con un texto y otros con otro. Puedes cambiar el título, los intentos y la franja horaria. Si necesitas otro texto, crea una prueba nueva.
         </p>
       )}
 
@@ -41,21 +42,7 @@ export default async function EditarPruebaPage({ params }: { params: Promise<{ i
             <input id="title" name="title" required defaultValue={test.title} className="field" />
           </div>
           <TestContentFields defaultContent={test.content} locked={locked} />
-          <div className="flex flex-col gap-2">
-            <label htmlFor="duration" className="label">Duración (minutos)</label>
-            <input
-              id="duration"
-              name="duration"
-              type="number"
-              min={0.5}
-              max={30}
-              step={0.5}
-              defaultValue={test.duration_sec / 60}
-              required
-              disabled={locked}
-              className="field disabled:bg-ground disabled:text-muted"
-            />
-          </div>
+          <TestRulesFields defaultDurationSec={test.duration_sec} defaultMaxAttempts={test.max_attempts} lockDuration={locked} />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <label htmlFor="opens" className="label">Se abre</label>

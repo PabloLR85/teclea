@@ -9,7 +9,7 @@ Tecnología: Next.js (desplegado en Vercel), base de datos Supabase (PostgreSQL)
 ### 1. Supabase (base de datos)
 
 1. Entra en https://supabase.com y crea un proyecto nuevo. Elige una región europea.
-2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**. Si tu base se creó con una versión anterior, ejecuta también `supabase/migracion-3.sql` (incluye la 2).
+2. Ve a **SQL Editor > New query**, pega el contenido de `supabase/schema.sql` y pulsa **Run**. Si tu base se creó con una versión anterior, ejecuta también las migraciones que falten, en orden: `supabase/migracion-3.sql` (incluye la 2) y `supabase/migracion-4.sql`.
 3. Ve a **Project Settings > API** (o **API Keys**) y copia dos datos:
    - **Project URL**: algo como `https://abcdxyz.supabase.co`
    - **service_role key** (o la *secret key* `sb_secret_...` en los proyectos nuevos). Esta clave es secreta: solo va en Vercel, nunca en el código.
@@ -63,7 +63,7 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 ### Alumnos
 
 - **Practicar:** 6 niveles y 19 lecciones (fila guía, fila superior, fila inferior, teclado numérico, mayúsculas y tildes, fichas de datos). Una lección se supera completando el texto con al menos un 90 % de precisión, y eso desbloquea la siguiente.
-- **Pruebas:** un solo intento, dentro de la franja horaria que marques. El reloj empieza al pulsar "Empezar" y sigue corriendo aunque se recargue la página. Al acabar el tiempo se entrega sola.
+- **Pruebas:** se pueden repetir sin límite mientras estén abiertas, salvo que el profesor las marque como examen con un número máximo de intentos. Pueden tener límite de tiempo (hasta 3 horas) o no tenerlo. Para la nota cuenta el mejor intento. El alumno puede entregar antes de terminar y ve la corrección de cada intento.
 - **Formularios:** 5 plantillas (alta de cliente, pedido, factura de proveedor, encuesta e inventario). El documento original sale a la izquierda y el formulario a la derecha. Se corrige campo a campo. Al pulsar Intro, en práctica el registro solo se graba si está completo y exacto (los intentos con datos mal escritos suman errores); en pruebas, si está completo y con formato válido (CP, NIF, CIF, teléfono, correo, fecha, importes).
 - **Carrera:** salas en directo que abre el profesor. Cuenta atrás, barras de avance de todos y clasificación final.
 - **Ranking:** semanal (mejor marca desde el lunes) y general (media de las 5 mejores marcas). Solo cuentan ejercicios de 50 caracteres o más. Aparece el alias, nunca el nombre real.
@@ -72,7 +72,7 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 ### Profesor
 
 - **Alumnos:** alta masiva, PIN visible, nuevo PIN, lecciones superadas, mejor marca de la semana, última conexión y exportación del resumen en CSV.
-- **Pruebas:** de texto (con banco de textos por categorías) o de formularios, con duración y franja de apertura. Se pueden cerrar antes de tiempo.
+- **Pruebas:** de texto (con banco de textos por categorías) o de formularios; con o sin límite de tiempo; intentos ilimitados o examen con máximo de intentos; franja de apertura. Todo editable después. Se pueden cerrar antes de tiempo.
 - **Resultados:** brutas, errores, precisión, netas y nota por alumno. Botones para validar un intento marcado y para permitir repetir. Exportación en CSV que se abre directamente en Excel.
 - **Carreras:** crea una sala con un texto del banco o uno propio, ve quién entra, da la salida y consulta los resultados guardados.
 - **Baremo:** netas para el 5, netas para el 10, precisión mínima y penalización por error. Las notas se recalculan al cambiarlo.

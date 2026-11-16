@@ -19,6 +19,8 @@ type Props = {
   reviewHref?: string;
   retryHref?: string;
   showGrade?: boolean;
+  elapsedOffsetMs?: number;
+  allowEarlySubmit?: boolean;
 };
 
 function fmtTime(ms: number) {
@@ -26,13 +28,25 @@ function fmtTime(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, backHref, reviewHref, retryHref, showGrade }: Props) {
+export function FormExercise({
+  formId,
+  recordLimit,
+  mode,
+  limitMs,
+  onSubmit,
+  backHref,
+  reviewHref,
+  retryHref,
+  showGrade,
+  elapsedOffsetMs = 0,
+  allowEarlySubmit,
+}: Props) {
   const t = findForm(formId)!;
   const total = Math.min(recordLimit, t.records.length);
   const empty = () => Object.fromEntries(t.fields.map((f) => [f.key, ""]));
   const [answers, setAnswers] = useState<FormAnswers>([empty()]);
   const [current, setCurrent] = useState(0);
-  const [startedAt, setStartedAt] = useState<number | null>(mode === "prueba" ? Date.now() : null);
+  const [startedAt, setStartedAt] = useState<number | null>(mode === "prueba" ? Date.now() - elapsedOffsetMs : null);
   const [now, setNow] = useState(Date.now());
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [sending, setSending] = useState(false);
@@ -233,9 +247,16 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
                 {mode === "practica" && " Cada intento con datos mal escritos suma errores."}
               </p>
             )}
-            <button type="submit" className="btn btn-primary self-start">
-              {current + 1 >= total ? "Grabar y terminar" : "Grabar registro"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn btn-primary">
+                {current + 1 >= total ? "Grabar y terminar" : "Grabar registro"}
+              </button>
+              {allowEarlySubmit && (
+                <button type="button" onClick={() => void finish(answers, current)} disabled={typedChars === 0} className="btn btn-secondary">
+                  Entregar ahora
+                </button>
+              )}
+            </div>
             <span className="text-[13px] text-soft">
               Pulsa Intro para grabar el registro.{" "}
               {mode === "practica"
