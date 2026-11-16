@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { findForm, validateExact, validateFormat, type FormAnswers, type FormRejection } from "@/lib/forms";
+import { findForm, normalizeFieldValue, validateExact, validateFormat, type FormAnswers, type FormRejection } from "@/lib/forms";
 import { normalizeTyped, sameText, type InputEvent } from "@/lib/scoring";
 import type { SubmitResult } from "@/lib/attempts";
 import { FormReview } from "./FormReview";
@@ -182,7 +182,8 @@ export function FormExercise({
       const m = mode === "practica" ? validateExact(f, v, expected[f.key]) : validateFormat(f, v);
       if (m) {
         msgs[f.key] = m;
-        if (v.trim() && !sameText(v.trim(), expected[f.key])) contentWrong = true;
+        const nv = normalizeFieldValue(f, v);
+        if (nv && !sameText(nv, expected[f.key])) contentWrong = true;
       }
     }
     if (Object.keys(msgs).length > 0) {
@@ -193,8 +194,8 @@ export function FormExercise({
       return;
     }
     setFieldMsgs({});
-    // Al grabar se quitan los espacios sobrantes, como haria el programa de la empresa
-    const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()]));
+    // Al grabar se quitan los espacios sobrantes y se completan los decimales, como haria el programa de la empresa
+    const trimmed = Object.fromEntries(t.fields.map((f) => [f.key, normalizeFieldValue(f, values[f.key] ?? "")]));
     const saved = answers.map((a, i) => (i === current ? trimmed : a));
     setAnswers(saved);
     const submitted = current + 1;
