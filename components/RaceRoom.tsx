@@ -6,6 +6,7 @@ import { TypingExercise } from "./TypingExercise";
 import { RaceLanes } from "./RaceLanes";
 import { joinRace, raceTick, submitRace, type RaceProgress } from "@/app/actions/carrera";
 import type { RacePhase, RaceState } from "@/lib/races";
+import { isNumericText } from "@/lib/keys";
 
 type Props = {
   raceId: string;
@@ -167,6 +168,7 @@ export function RaceRoom({ raceId, title, content, penalty, initial }: Props) {
             backHref="/carrera"
             reviewHref={`/carrera/${raceId}`}
             hideKeyboard
+            numpadOnly={isNumericText(content)}
           />
         </>
       )}

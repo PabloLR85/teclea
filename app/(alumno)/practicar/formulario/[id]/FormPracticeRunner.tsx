@@ -13,6 +13,7 @@ export function FormPracticeRunner({ formId }: { formId: string }) {
       onSubmit={(p) => submitFormPractice(formId, p)}
       backHref="/practicar"
       retryHref={`/practicar/formulario/${formId}`}
+      allowNumpadToggle
     />
   );
 }

@@ -23,6 +23,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
             { href: "/pruebas", label: "Pruebas" },
             { href: "/carrera", label: "Carrera" },
             { href: "/ranking", label: "Ranking" },
+            { href: "/progreso", label: "Mi progreso" },
             { href: "/puntuacion", label: "Puntuación" },
           ]}
         />

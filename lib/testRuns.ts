@@ -62,18 +62,21 @@ export async function getRunState(studentId: string, test: TestRow): Promise<Run
   };
 }
 
-export type StartResult = { ok: true; remainingMs: number | null; elapsedMs: number; resumed: boolean } | { ok: false; error: string };
+export type StartResult =
+  | { ok: true; sessionId: string; limitMs: number | null; elapsedMs: number; resumed: boolean }
+  | { ok: false; error: string };
 
 export async function startRun(studentId: string, test: TestRow): Promise<StartResult> {
   const st = await getRunState(studentId, test);
-  if (st.inProgress) return { ok: true, remainingMs: st.inProgress.remainingMs, elapsedMs: Date.now() - st.inProgress.startedAt, resumed: true };
+  const limitMs = test.duration_sec === null ? null : test.duration_sec * 1000;
+  if (st.inProgress) return { ok: true, sessionId: st.inProgress.id, limitMs, elapsedMs: Date.now() - st.inProgress.startedAt, resumed: true };
   if (!st.canStart) return { ok: false, error: st.reason ?? "No puedes empezar esta prueba." };
-  const { error } = await db().from("test_sessions").insert({ student_id: studentId, test_id: test.id });
-  if (error) {
+  const { data: created, error } = await db().from("test_sessions").insert({ student_id: studentId, test_id: test.id }).select("id").single();
+  if (error || !created) {
     console.error("startRun", error);
     return { ok: false, error: "No se pudo iniciar la prueba. Vuelve a intentarlo." };
   }
-  return { ok: true, remainingMs: test.duration_sec === null ? null : test.duration_sec * 1000, elapsedMs: 0, resumed: false };
+  return { ok: true, sessionId: created.id as string, limitMs, elapsedMs: 0, resumed: false };
 }
 
 // Valida la entrega: busca el intento abierto, fija el tiempo que cuenta y lo marca como entregado.

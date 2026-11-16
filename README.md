@@ -68,6 +68,9 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 - **Carrera:** salas en directo que abre el profesor. Cuenta atrás, barras de avance de todos y clasificación final.
 - **Ranking:** semanal (mejor marca desde el lunes) y general (media de las 5 mejores marcas). Solo cuentan ejercicios de 50 caracteres o más. Aparece el alias, nunca el nombre real.
 - **Perfil:** cada alumno puede cambiar su alias.
+- **Mi progreso:** evolución semanal de netas y precisión, minutos de práctica por día y mapa de teclas con el porcentaje de fallos por tecla y por dedo.
+- **Teclado numérico:** en las lecciones numéricas, en las pruebas y carreras de texto numérico y en los campos de cifras de los formularios, las cifras solo se escriben con el bloque numérico. La tecla decimal escribe la coma. En práctica, el alumno puede desactivarlo si su teclado no tiene bloque numérico.
+- **Recuperación:** si se recarga la página o se cuelga el navegador durante una prueba, al volver se recupera lo escrito (en el mismo ordenador).
 
 ### Profesor
 
@@ -75,6 +78,7 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 - **Pruebas:** de texto (con banco de textos por categorías) o de formularios; con o sin límite de tiempo; intentos ilimitados o examen con máximo de intentos; franja de apertura. Todo editable después. Se pueden cerrar antes de tiempo.
 - **Resultados:** brutas, errores, precisión, netas y nota por alumno. Botones para validar un intento marcado y para permitir repetir. Exportación en CSV que se abre directamente en Excel.
 - **Carreras:** crea una sala con un texto del banco o uno propio, ve quién entra, da la salida y consulta los resultados guardados.
+- **Ficha de alumno:** pulsando en su nombre, la misma vista de progreso que ve el alumno y sus últimos ejercicios. La tabla de alumnos muestra los minutos de práctica de los últimos 7 días.
 - **Baremo:** netas para el 5, netas para el 10, precisión mínima y penalización por error. Las notas se recalculan al cambiarlo.
 
 ### Puntuación
@@ -94,6 +98,10 @@ Valores iniciales: 5 desde 120 netas/min, 10 desde 250, precisión mínima 95 %,
 - Lo escrito se compara con el original por alineación: un carácter saltado, de más o equivocado cuenta como un solo error y no arrastra al resto. Se tolera saltarse o repetir hasta 120 caracteres seguidos (una línea).
 - Se consideran la misma tecla las comillas « » “ ” y ", los apóstrofos ’ y ', el º y el °, los guiones largos y el -, y los espacios especiales. Las tildes se normalizan para que no dependan del teclado o del sistema.
 - En formularios no cuentan los espacios al principio o al final de un campo.
+
+### Mantenimiento
+
+- `vercel.json` programa una visita diaria a `/api/keepalive` para que Supabase no pause el proyecto gratuito por inactividad. Si defines la variable `CRON_SECRET` en Vercel, la visita queda protegida.
 
 ### Seguridad y antitrampas
 

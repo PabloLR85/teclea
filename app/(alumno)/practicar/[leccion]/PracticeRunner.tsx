@@ -13,6 +13,8 @@ export function PracticeRunner({ lessonId, text, nextHref, penalty }: { lessonId
       nextHref={nextHref}
       backHref="/practicar"
       penalty={penalty}
+      numpadOnly={lessonId.startsWith("4-")}
+      allowNumpadToggle
     />
   );
 }

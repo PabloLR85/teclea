@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Keyboard } from "./Keyboard";
+import { useNumpadSetting } from "./useNumpadSetting";
+import { numpadKey } from "@/lib/keys";
 import type { SubmitResult } from "@/app/actions/alumno";
 import { align, MAX_EXTRA, normalizeTyped, ST_MISSING, ST_OK, ST_WRONG, type InputEvent } from "@/lib/scoring";
 
@@ -23,6 +25,13 @@ type Props = {
   hideKeyboard?: boolean;
   elapsedOffsetMs?: number; // prueba retomada: tiempo que ya habia pasado
   allowEarlySubmit?: boolean; // boton para entregar antes de terminar
+  // Recuperacion tras recargar: texto y registro guardados, y aviso para guardarlos de nuevo
+  initialTyped?: string;
+  initialEvents?: InputEvent[];
+  onDraft?: (typed: string, events: InputEvent[]) => void;
+  // Ejercicios numericos: las cifras solo valen desde el bloque numerico
+  numpadOnly?: boolean;
+  allowNumpadToggle?: boolean; // en practica, el alumno puede desactivarlo si su teclado no tiene bloque numerico
 };
 
 function fmtTime(ms: number) {
@@ -45,14 +54,21 @@ export function TypingExercise({
   hideKeyboard,
   elapsedOffsetMs = 0,
   allowEarlySubmit,
+  initialTyped,
+  initialEvents,
+  onDraft,
+  numpadOnly,
+  allowNumpadToggle,
 }: Props) {
   const target = useMemo(() => targetRaw.normalize("NFC"), [targetRaw]);
-  const [typed, setTyped] = useState("");
+  const [typed, setTyped] = useState(initialTyped ?? "");
+  const numpad = useNumpadSetting(!!numpadOnly, !!allowNumpadToggle);
+  const [numpadMsg, setNumpadMsg] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [sending, setSending] = useState(false);
-  const events = useRef<InputEvent[]>([]);
+  const events = useRef<InputEvent[]>(initialEvents ?? []);
   const finishedRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const textBoxRef = useRef<HTMLDivElement>(null);
@@ -99,9 +115,20 @@ export function TypingExercise({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining]);
 
+  // Guarda un borrador cada poco (solo si se pide), para recuperarlo si se recarga la pagina
+  useEffect(() => {
+    if (!onDraft || finishedRef.current) return;
+    const id = setTimeout(() => onDraft(typed, events.current), 600);
+    return () => clearTimeout(id);
+  }, [typed, onDraft]);
+
   function onChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    processValue(e.target.value);
+  }
+
+  function processValue(raw: string) {
     if (finishedRef.current) return;
-    const value = normalizeTyped(e.target.value.replace(/\n/g, "")).slice(0, target.length + MAX_EXTRA);
+    const value = normalizeTyped(raw.replace(/\n/g, "")).slice(0, target.length + MAX_EXTRA);
     let start = startedAt;
     if (!start) {
       start = Date.now();
@@ -119,6 +146,33 @@ export function TypingExercise({
 
   function block(e: React.SyntheticEvent) {
     e.preventDefault();
+  }
+
+  // Inserta un caracter donde esta el cursor, como si se hubiera tecleado
+  function insertAtCaret(ch: string) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? typed.length;
+    const end = el?.selectionEnd ?? typed.length;
+    processValue(typed.slice(0, start) + ch + typed.slice(end));
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!numpad.active || e.ctrlKey || e.metaKey || e.altKey) return;
+    const r = numpadKey(e.key, e.code);
+    if (r === "ok") {
+      if (numpadMsg) setNumpadMsg(null);
+      return;
+    }
+    e.preventDefault();
+    if (r === "decimal") {
+      // La tecla decimal del bloque numerico escribe el separador que toca: coma, salvo que el texto pida punto
+      const expected = target[alignment.consumed];
+      insertAtCaret(expected === "." ? "." : ",");
+    } else if (r === "numlock") {
+      setNumpadMsg("Activa Bloq Num: el bloque numérico está escribiendo flechas en lugar de cifras.");
+    } else {
+      setNumpadMsg("Usa el bloque numérico de la derecha para las cifras. Las de la fila de arriba no cuentan en este ejercicio.");
+    }
   }
 
   function reset() {
@@ -223,6 +277,7 @@ export function TypingExercise({
               ref={inputRef}
               value={typed}
               onChange={onChange}
+              onKeyDown={onKeyDown}
               onPaste={block}
               onDrop={block}
               onContextMenu={block}
@@ -237,6 +292,26 @@ export function TypingExercise({
             />
           </div>
 
+          {numpad.required && !done && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line px-4 py-3 text-sm text-body">
+              <span>
+                {numpad.active
+                  ? "Ejercicio de teclado numérico: escribe las cifras con el bloque numérico de la derecha, con Bloq Num activado. La tecla decimal escribe la coma."
+                  : "Bloque numérico desactivado: puedes usar las cifras de la fila de arriba."}
+              </span>
+              {numpad.allowToggle && (
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] text-muted">
+                  <input type="checkbox" checked={numpad.off} onChange={(e) => numpad.toggle(e.target.checked)} className="h-4 w-4 accent-[#4338CA]" />
+                  Mi teclado no tiene bloque numérico
+                </label>
+              )}
+            </div>
+          )}
+          {numpadMsg && !done && (
+            <p role="alert" className="m-0 rounded-xl bg-error-soft px-4 py-3 text-sm font-medium text-error-ink">
+              {numpadMsg}
+            </p>
+          )}
           {allowEarlySubmit && !done && (
             <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => void finish(typed)} disabled={typed.length === 0} className="btn btn-secondary">
@@ -299,7 +374,7 @@ export function TypingExercise({
           )}
         </div>
 
-        {!done && !hideKeyboard && <Keyboard next={next} />}
+        {!done && !hideKeyboard && <Keyboard next={next} numpad={numpad.active} />}
       </section>
 
       <aside className="flex flex-[1_1_260px] flex-col gap-4">

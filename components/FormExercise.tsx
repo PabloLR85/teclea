@@ -6,8 +6,11 @@ import { findForm, validateExact, validateFormat, type FormAnswers, type FormRej
 import { normalizeTyped, sameText, type InputEvent } from "@/lib/scoring";
 import type { SubmitResult } from "@/lib/attempts";
 import { FormReview } from "./FormReview";
+import { useNumpadSetting } from "./useNumpadSetting";
+import { numpadKey } from "@/lib/keys";
 
 export type FormPayload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number; rejections: FormRejection[] };
+export type FormDraft = { answers: FormAnswers; current: number; events: InputEvent[]; rejections: FormRejection[] };
 
 type Props = {
   formId: string;
@@ -21,6 +24,9 @@ type Props = {
   showGrade?: boolean;
   elapsedOffsetMs?: number;
   allowEarlySubmit?: boolean;
+  initialDraft?: FormDraft | null;
+  onDraft?: (d: FormDraft) => void;
+  allowNumpadToggle?: boolean;
 };
 
 function fmtTime(ms: number) {
@@ -40,21 +46,28 @@ export function FormExercise({
   showGrade,
   elapsedOffsetMs = 0,
   allowEarlySubmit,
+  initialDraft,
+  onDraft,
+  allowNumpadToggle,
 }: Props) {
   const t = findForm(formId)!;
   const total = Math.min(recordLimit, t.records.length);
   const empty = () => Object.fromEntries(t.fields.map((f) => [f.key, ""]));
-  const [answers, setAnswers] = useState<FormAnswers>([empty()]);
-  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState<FormAnswers>(initialDraft?.answers?.length ? initialDraft.answers : [empty()]);
+  const [current, setCurrent] = useState(initialDraft?.current ?? 0);
+  // Los campos numericos se escriben con el bloque numerico
+  const hasNumeric = t.fields.some((f) => f.numeric);
+  const numpad = useNumpadSetting(hasNumeric, !!allowNumpadToggle);
+  const [numpadMsg, setNumpadMsg] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(mode === "prueba" ? Date.now() - elapsedOffsetMs : null);
   const [now, setNow] = useState(Date.now());
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [sending, setSending] = useState(false);
-  const events = useRef<InputEvent[]>([]);
+  const events = useRef<InputEvent[]>(initialDraft?.events ?? []);
   const finishedRef = useRef(false);
   const firstInput = useRef<HTMLInputElement>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
-  const rejections = useRef<FormRejection[]>([]);
+  const rejections = useRef<FormRejection[]>(initialDraft?.rejections ?? []);
   // Mensajes de validacion por campo del registro en curso
   const [fieldMsgs, setFieldMsgs] = useState<Record<string, string>>({});
 
@@ -67,6 +80,34 @@ export function FormExercise({
   useEffect(() => {
     firstInput.current?.focus();
   }, [current]);
+
+  // Borrador para recuperar la prueba si se recarga la pagina
+  useEffect(() => {
+    if (!onDraft || finishedRef.current) return;
+    const id = setTimeout(() => onDraft({ answers, current, events: events.current, rejections: rejections.current }), 600);
+    return () => clearTimeout(id);
+  }, [answers, current, onDraft]);
+
+  function onNumericKeyDown(key: string, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!numpad.active || e.ctrlKey || e.metaKey || e.altKey) return;
+    const r = numpadKey(e.key, e.code);
+    if (r === "ok") {
+      if (numpadMsg) setNumpadMsg(null);
+      return;
+    }
+    e.preventDefault();
+    if (r === "decimal") {
+      const el = e.currentTarget;
+      const v = answers[current]?.[key] ?? "";
+      const a = el.selectionStart ?? v.length;
+      const b = el.selectionEnd ?? v.length;
+      onField(key, v.slice(0, a) + "," + v.slice(b));
+    } else if (r === "numlock") {
+      setNumpadMsg("Activa Bloq Num: el bloque numérico está escribiendo flechas en lugar de cifras.");
+    } else {
+      setNumpadMsg("En los campos de cifras usa el bloque numérico de la derecha. Las cifras de la fila de arriba no se escriben.");
+    }
+  }
 
   const elapsed = startedAt ? now - startedAt : 0;
   const remaining = limitMs ? limitMs - elapsed : null;
@@ -222,6 +263,7 @@ export function FormExercise({
                     aria-describedby={fieldMsgs[f.key] ? `m-${f.key}` : undefined}
                     value={answers[current]?.[f.key] ?? ""}
                     onChange={(e) => onField(f.key, e.target.value)}
+                    onKeyDown={f.numeric ? (e) => onNumericKeyDown(f.key, e) : undefined}
                     onPaste={block}
                     onDrop={block}
                     autoComplete="off"
@@ -241,6 +283,26 @@ export function FormExercise({
                 </div>
               ))}
             </div>
+            {numpad.required && (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted">
+                <span>
+                  {numpad.active
+                    ? "Campos de cifras: usa el bloque numérico (Bloq Num activado). La tecla decimal escribe la coma."
+                    : "Bloque numérico desactivado para este ordenador."}
+                </span>
+                {numpad.allowToggle && (
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input type="checkbox" checked={numpad.off} onChange={(e) => numpad.toggle(e.target.checked)} className="h-4 w-4 accent-[#4338CA]" />
+                    Mi teclado no tiene bloque numérico
+                  </label>
+                )}
+              </div>
+            )}
+            {numpadMsg && (
+              <p role="alert" className="m-0 rounded-[10px] bg-error-soft px-3.5 py-2.5 text-sm font-medium text-error-ink">
+                {numpadMsg}
+              </p>
+            )}
             {Object.keys(fieldMsgs).length > 0 && (
               <p role="alert" className="m-0 rounded-[10px] bg-error-soft px-3.5 py-2.5 text-sm text-error-ink">
                 No se puede grabar: revisa {Object.keys(fieldMsgs).length === 1 ? "el campo marcado" : `los ${Object.keys(fieldMsgs).length} campos marcados`}.

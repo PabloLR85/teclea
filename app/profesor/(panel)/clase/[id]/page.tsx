@@ -6,6 +6,7 @@ import { ActionForm } from "@/components/ActionForm";
 import { ALL_LESSONS } from "@/lib/lessons";
 import { computeGrade, evaluate, formatGrade, normalizeBaremo, type Baremo } from "@/lib/scoring";
 import { getRanking } from "@/lib/ranking";
+import { practiceMinutes7 } from "@/lib/progress";
 import { formatDateTime, isoToMadridLocal } from "@/lib/utils";
 import {
   addStudents,
@@ -112,6 +113,7 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
     ids.length ? db().from("lesson_progress").select("student_id").eq("completed", true).in("student_id", ids) : Promise.resolve({ data: [] as { student_id: string }[] }),
     getRanking(classId, "semana"),
   ]);
+  const minutes7 = await practiceMinutes7(classId);
   const doneCount = new Map<string, number>();
   for (const p of progress ?? []) doneCount.set(p.student_id, (doneCount.get(p.student_id) ?? 0) + 1);
   const weekBest = new Map(weekly.map((r) => [r.studentId, r.score]));
@@ -139,6 +141,7 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
                   <th className="th">Alias</th>
                   <th className="th text-right">Lecciones</th>
                   <th className="th text-right">Mejor semana</th>
+                  <th className="th text-right">Práctica 7 días</th>
                   <th className="th">Última conexión</th>
                   <th className="th"><span className="sr-only">Acciones</span></th>
                 </tr>
@@ -146,7 +149,11 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
               <tbody>
                 {students.map((s) => (
                   <tr key={s.id}>
-                    <td className="td font-medium">{s.full_name}</td>
+                    <td className="td font-medium">
+                      <Link href={`/profesor/clase/${classId}/alumno/${s.id}`} className="text-ink underline decoration-line-strong underline-offset-4 hover:text-accent">
+                        {s.full_name}
+                      </Link>
+                    </td>
                     <td className="td font-mono text-sm">{s.username}</td>
                     <td className="td font-mono text-sm">
                       {s.pin}
@@ -155,6 +162,7 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
                     <td className="td">{s.alias}</td>
                     <td className="td text-right font-mono">{doneCount.get(s.id) ?? 0}/{ALL_LESSONS.length}</td>
                     <td className="td text-right font-mono">{weekBest.has(s.id) ? Math.round(weekBest.get(s.id)!) : "-"}</td>
+                    <td className="td text-right font-mono">{minutes7.get(s.id) ?? 0} min</td>
                     <td className="td text-sm text-muted">{s.last_seen_at ? formatDateTime(s.last_seen_at) : "Nunca"}</td>
                     <td className="td">
                       <div className="flex items-center justify-end gap-1.5">

@@ -1,32 +1,61 @@
-const ROWS = ["1234567890", "qwertyuiop", "asdfghjklñ", "zxcvbnm,.-"];
+import { baseKey, FINGERS, KEY_ROWS as ROWS } from "@/lib/keys";
 
-const FINGERS: Record<string, string> = {
-  "1": "meñique izquierdo", q: "meñique izquierdo", a: "meñique izquierdo", z: "meñique izquierdo",
-  "2": "anular izquierdo", w: "anular izquierdo", s: "anular izquierdo", x: "anular izquierdo",
-  "3": "corazón izquierdo", e: "corazón izquierdo", d: "corazón izquierdo", c: "corazón izquierdo",
-  "4": "índice izquierdo", "5": "índice izquierdo", r: "índice izquierdo", t: "índice izquierdo",
-  f: "índice izquierdo", g: "índice izquierdo", v: "índice izquierdo", b: "índice izquierdo",
-  "6": "índice derecho", "7": "índice derecho", y: "índice derecho", u: "índice derecho",
-  h: "índice derecho", j: "índice derecho", n: "índice derecho", m: "índice derecho",
-  "8": "corazón derecho", i: "corazón derecho", k: "corazón derecho", ",": "corazón derecho",
-  "9": "anular derecho", o: "anular derecho", l: "anular derecho", ".": "anular derecho",
-  "0": "meñique derecho", p: "meñique derecho", ñ: "meñique derecho", "-": "meñique derecho",
-  " ": "pulgar",
-};
+export { baseKey };
 
-// Tecla fisica de un caracter: quita tildes y mayusculas, pero conserva la ñ.
-export function baseKey(ch: string): string {
-  if (!ch) return "";
-  const lower = ch.toLowerCase();
-  if (lower === "ñ") return "ñ";
-  const stripped = lower.normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (stripped === ":") return ".";
-  if (stripped === ";") return ",";
-  if (stripped === "/") return "7";
-  return stripped;
+const NUMPAD: { k: string; label: string; finger: string; wide?: boolean }[][] = [
+  [{ k: "7", label: "7", finger: "índice" }, { k: "8", label: "8", finger: "corazón" }, { k: "9", label: "9", finger: "anular" }],
+  [{ k: "4", label: "4", finger: "índice" }, { k: "5", label: "5", finger: "corazón" }, { k: "6", label: "6", finger: "anular" }],
+  [{ k: "1", label: "1", finger: "índice" }, { k: "2", label: "2", finger: "corazón" }, { k: "3", label: "3", finger: "anular" }],
+  [{ k: "0", label: "0", finger: "pulgar", wide: true }, { k: ",", label: ",", finger: "anular" }],
+];
+const NUMPAD_SIDE: Record<string, string> = { "/": "corazón", "-": "meñique" };
+
+// Bloque numerico: la mano derecha descansa con el indice en el 4, el corazon en el 5 (con marca) y el anular en el 6.
+function Numpad({ next }: { next: string }) {
+  const key = next === "." ? "," : next;
+  const all = NUMPAD.flat();
+  const finger = all.find((x) => x.k === key)?.finger ?? NUMPAD_SIDE[key] ?? (key === " " ? "pulgar izquierdo (barra espaciadora)" : undefined);
+  return (
+    <div className="card flex flex-col gap-3.5 px-5 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+        <span>
+          Siguiente tecla: <strong className="font-mono text-base text-accent">{next === " " ? "espacio" : next || "-"}</strong>
+        </span>
+        <span>
+          Dedo: <strong className="text-ink">{finger ? `${finger}${finger.includes("pulgar izquierdo") ? "" : " derecho"}` : "-"}</strong>
+        </span>
+      </div>
+      <div className="flex justify-center gap-1.5" aria-hidden="true">
+        <div className="flex flex-col gap-1.5">
+          {NUMPAD.map((row, i) => (
+            <div key={i} className="flex gap-1.5">
+              {row.map((c) => (
+                <span
+                  key={c.k}
+                  className={`flex h-12 items-center justify-center rounded-[10px] font-mono text-base ${c.wide ? "w-[102px]" : "w-12"} ${
+                    c.k === key ? "bg-accent font-bold text-white" : `border border-line bg-white text-body ${c.k === "5" ? "border-b-[3px] border-b-accent-mid" : ""}`
+                  }`}
+                >
+                  {c.label}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {["/", "-"].map((k) => (
+            <span key={k} className={`flex h-12 w-12 items-center justify-center rounded-[10px] font-mono text-base ${k === key ? "bg-accent font-bold text-white" : "border border-line bg-white text-body"}`}>
+              {k}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export function Keyboard({ next }: { next: string }) {
+export function Keyboard({ next, numpad = false }: { next: string; numpad?: boolean }) {
+  if (numpad) return <Numpad next={next} />;
   const key = baseKey(next);
   const needsShift = next !== "" && next !== next.toLowerCase() || next === ":" || next === ";" || next === "/";
   const finger = FINGERS[key];

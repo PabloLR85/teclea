@@ -6,6 +6,13 @@ import { FormExercise } from "@/components/FormExercise";
 import { startTest, submitTest } from "@/app/actions/alumno";
 import { submitFormTest } from "@/app/actions/formulario";
 import { findForm } from "@/lib/forms";
+import { isNumericText } from "@/lib/keys";
+import { clearDraft, loadDraft, saveDraft } from "@/components/drafts";
+import type { FormDraft } from "@/components/FormExercise";
+import type { InputEvent } from "@/lib/scoring";
+import type { SubmitResult } from "@/lib/attempts";
+
+type TextDraft = { typed: string; events: InputEvent[]; savedAt: number };
 
 type Props = {
   testId: string;
@@ -18,7 +25,13 @@ type Props = {
 };
 
 export function TestRunner({ testId, text, durationSec, resumed, penalty, attemptNumber, attemptsLeft }: Props) {
-  const [run, setRun] = useState<{ limitMs: number | null; elapsedMs: number } | null>(null);
+  const [run, setRun] = useState<{
+    sessionId: string;
+    limitMs: number | null;
+    elapsedMs: number;
+    textDraft: TextDraft | null;
+    formDraft: (FormDraft & { savedAt: number }) | null;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const formId = text.startsWith("form:") ? text.slice(5) : null;
@@ -29,8 +42,27 @@ export function TestRunner({ testId, text, durationSec, resumed, penalty, attemp
     setError(null);
     const r = await startTest(testId);
     setLoading(false);
-    if (r.ok) setRun({ limitMs: r.remainingMs, elapsedMs: r.elapsedMs });
-    else setError(r.error);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    // Si el intento estaba a medias en este navegador, se recupera lo escrito
+    const draft = r.resumed ? loadDraft<Record<string, unknown>>(r.sessionId) : null;
+    setRun({
+      sessionId: r.sessionId,
+      limitMs: r.limitMs,
+      elapsedMs: r.elapsedMs,
+      textDraft: draft && typeof draft.typed === "string" ? (draft as unknown as TextDraft) : null,
+      formDraft: draft && Array.isArray(draft.answers) ? (draft as unknown as FormDraft & { savedAt: number }) : null,
+    });
+  }
+
+  // Al entregar con exito se borra el borrador
+  function withCleanup(p: Promise<SubmitResult>, sessionId: string) {
+    return p.then((res) => {
+      if (res.ok) clearDraft(sessionId);
+      return res;
+    });
   }
 
   if (run && form) {
@@ -40,8 +72,10 @@ export function TestRunner({ testId, text, durationSec, resumed, penalty, attemp
         recordLimit={form.records.length}
         mode="prueba"
         limitMs={run.limitMs ?? undefined}
-        elapsedOffsetMs={run.limitMs === null ? run.elapsedMs : 0}
-        onSubmit={(p) => submitFormTest(testId, p)}
+        elapsedOffsetMs={run.elapsedMs}
+        onSubmit={(p) => withCleanup(submitFormTest(testId, p), run.sessionId)}
+        initialDraft={run.formDraft}
+        onDraft={(d) => saveDraft(run.sessionId, { ...d, savedAt: Date.now() })}
         backHref="/pruebas"
         reviewHref={`/pruebas/${testId}?t=${Date.now()}`}
         allowEarlySubmit
@@ -56,8 +90,12 @@ export function TestRunner({ testId, text, durationSec, resumed, penalty, attemp
         target={text}
         mode="prueba"
         limitMs={run.limitMs ?? undefined}
-        elapsedOffsetMs={run.limitMs === null ? run.elapsedMs : 0}
-        onSubmit={(p) => submitTest(testId, p)}
+        elapsedOffsetMs={run.elapsedMs}
+        onSubmit={(p) => withCleanup(submitTest(testId, p), run.sessionId)}
+        initialTyped={run.textDraft?.typed}
+        initialEvents={run.textDraft?.events}
+        onDraft={(typed, events) => saveDraft(run.sessionId, { typed, events, savedAt: Date.now() })}
+        numpadOnly={isNumericText(text)}
         backHref="/pruebas"
         reviewHref={`/pruebas/${testId}?t=${Date.now()}`}
         penalty={penalty}
@@ -88,7 +126,7 @@ export function TestRunner({ testId, text, durationSec, resumed, penalty, attemp
       </ul>
       {resumed && durationSec !== null && (
         <p className="m-0 rounded-[10px] bg-error-soft px-4 py-3 text-sm text-error-ink">
-          El reloj de este intento sigue corriendo: al continuar tendrás solo el tiempo que te queda y empezarás el texto desde el principio.
+          El reloj de este intento sigue corriendo: al continuar tendrás solo el tiempo que te queda. Si es el mismo ordenador, recuperas lo que llevabas escrito.
         </p>
       )}
       {error && (
