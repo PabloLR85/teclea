@@ -1,5 +1,6 @@
 "use client";
 
+import { n1, pct } from "@/lib/format";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { findForm, normalizeFieldValue, validateExact, validateFormat, type FormAnswers, type FormRejection } from "@/lib/forms";
@@ -350,8 +351,8 @@ export function FormExercise({
       {result && result.ok && (
         <div className="flex flex-col gap-3 rounded-2xl bg-accent-soft px-6 py-5">
           <p className="m-0 text-[15px] text-accent-ink">
-            <strong>{mode === "prueba" ? "Prueba entregada." : "Ejercicio terminado."}</strong> {result.netPpm} pulsaciones netas por minuto,{" "}
-            {result.accuracy} % de precisión y {result.errors} {result.errors === 1 ? "error" : "errores"}.
+            <strong>{mode === "prueba" ? "Prueba entregada." : "Ejercicio terminado."}</strong> {n1(result.netPpm)} pulsaciones netas por minuto,{" "}
+            {pct(result.accuracy)} de precisión y {result.errors} {result.errors === 1 ? "error" : "errores"}.
             {showGrade && result.grade !== undefined && (
               <>
                 {" "}

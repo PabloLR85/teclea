@@ -15,7 +15,7 @@ export type Progress = {
   fingers: FingerStat[];
   weeks: WeekPoint[];
   days: DayPoint[];
-  totals: { attempts: number; minutes: number; minutes7: number; analyzedChars: number };
+  totals: { attempts: number; minutes: number; minutes7: number; ms7: number; analyzedChars: number };
 };
 
 // Solo cuentan teclas con un minimo de apariciones, para no sacar conclusiones de dos pulsaciones
@@ -158,15 +158,17 @@ export async function loadProgress(studentId: string, baremo: Baremo): Promise<P
   }
   const minutes = Math.round(attempts.reduce((s, a) => s + Number(a.duration_ms), 0) / 60000);
   const minutes7 = days.slice(-7).reduce((s, d) => s + d.minutes, 0);
+  const since7 = Date.now() - 7 * 24 * 3600 * 1000;
+  const ms7 = attempts.filter((a) => Date.parse(a.created_at) >= since7).reduce((s, a) => s + Number(a.duration_ms), 0);
 
-  return { keys, fingers, weeks, days, totals: { attempts: attempts.length, minutes, minutes7, analyzedChars } };
+  return { keys, fingers, weeks, days, totals: { attempts: attempts.length, minutes, minutes7, ms7, analyzedChars } };
 }
 
-// Minutos practicados en los ultimos 7 dias por alumno (para la tabla del profesor)
+// Tiempo practicado en los ultimos 7 dias por alumno, en milisegundos (para la tabla del profesor)
 export async function practiceMinutes7(classId: string): Promise<Map<string, number>> {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   const { data } = await db().from("attempts").select("student_id,duration_ms").eq("class_id", classId).gte("created_at", since).limit(10000);
   const m = new Map<string, number>();
   for (const a of data ?? []) m.set(a.student_id, (m.get(a.student_id) ?? 0) + Number(a.duration_ms));
-  return new Map([...m].map(([k, v]) => [k, Math.round(v / 60000)]));
+  return m; // milisegundos
 }

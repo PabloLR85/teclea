@@ -1,3 +1,4 @@
+import { pct } from "@/lib/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type StudentRow } from "@/lib/db";
@@ -115,7 +116,7 @@ export default async function ProfesorCarreraPage({ params }: { params: Promise<
                       </td>
                       <td className="td text-right font-mono">{Math.round(e.grossPpm)}</td>
                       <td className="td text-right font-mono">{a.errors}</td>
-                      <td className="td text-right font-mono">{e.accuracy} %</td>
+                      <td className="td text-right font-mono">{pct(e.accuracy)}</td>
                       <td className="td text-right font-mono font-semibold">{Math.round(e.netPpm)}</td>
                       <td className="td text-right">
                         <Link href={`/profesor/clase/${id}/intento/${a.id}`} className="btn btn-secondary h-9 px-3 text-[13px]">Ver</Link>

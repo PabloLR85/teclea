@@ -166,6 +166,7 @@ export function RaceRoom({ raceId, title, content, penalty, initial }: Props) {
             }}
             forceFinish={phase === "finished"}
             backHref="/carrera"
+            doneLabel="Carrera terminada."
             reviewHref={`/carrera/${raceId}`}
             hideKeyboard
             numpadOnly={isNumericText(content)}

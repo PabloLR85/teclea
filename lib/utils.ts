@@ -87,3 +87,17 @@ export function isoToMadridLocal(iso: string): string {
   const offset = madridOffsetMinutes(d);
   return new Date(d.getTime() + offset * 60000).toISOString().slice(0, 16);
 }
+
+// Alias que no se repita en la clase: "Lucía M.", y si ya existe "Lucía M. S.", y si no "Lucía M. 2"...
+export function uniqueAlias(fullName: string, taken: Set<string>): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  const candidates = [defaultAlias(fullName)];
+  if (parts.length > 2) candidates.push(`${cap(parts[0])} ${parts[1].charAt(0).toUpperCase()}. ${parts[2].charAt(0).toUpperCase()}.`);
+  if (parts.length > 1) candidates.push(`${cap(parts[0])} ${cap(parts[1])}`.slice(0, 20));
+  for (const c of candidates) if (!taken.has(c.toLowerCase())) return c;
+  for (let i = 2; ; i++) {
+    const c = `${candidates[0]} ${i}`;
+    if (!taken.has(c.toLowerCase())) return c;
+  }
+}

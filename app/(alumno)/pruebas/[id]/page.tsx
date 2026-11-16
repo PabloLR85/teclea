@@ -1,3 +1,4 @@
+import { pct } from "@/lib/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type TestRow } from "@/lib/db";
@@ -96,7 +97,7 @@ export default async function PruebaPage({
                     </td>
                     <td className="td text-muted">{formatDateTime(a.created_at)}</td>
                     <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
-                    <td className="td text-right font-mono">{e.accuracy} %</td>
+                    <td className="td text-right font-mono">{pct(e.accuracy)}</td>
                     <td className="td text-right font-mono font-semibold">{formatGrade(e.grade)}</td>
                     <td className="td text-right">
                       {isShown ? (

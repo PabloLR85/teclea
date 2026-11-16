@@ -102,6 +102,6 @@ export async function submitFormTest(testId: string, payload: Payload): Promise<
     await reopenRun(run.sessionId);
     return { ok: false, error: "No se pudo guardar la prueba. Vuelve a pulsar entregar o avisa al profesor antes de cerrar la página." };
   }
-  revalidatePath("/pruebas");
+  // Sin revalidar la pagina en curso: asi el alumno sigue viendo su resultado aunque fuera su ultimo intento
   return { ok: true, chars: s.chars, errors: s.errors, netPpm: e.netPpm, grossPpm: e.grossPpm, accuracy: e.accuracy, flagged, grade: e.grade };
 }

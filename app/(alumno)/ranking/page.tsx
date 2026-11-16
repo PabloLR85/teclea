@@ -1,3 +1,4 @@
+import { pct } from "@/lib/format";
 import Link from "next/link";
 import { requireStudent } from "@/lib/session";
 import { getRanking } from "@/lib/ranking";
@@ -56,7 +57,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
                   {r.studentId === student.id ? " (tú)" : ""}
                 </span>
                 <span className="font-display text-[34px] font-bold leading-none">{Math.round(r.score)}</span>
-                <span className="text-[13px] text-soft">netas/min · {r.accuracy} % precisión</span>
+                <span className="text-[13px] text-soft">netas/min · {pct(r.accuracy)} precisión</span>
               </div>
             ))}
           </div>
@@ -84,7 +85,7 @@ export default async function RankingPage({ searchParams }: { searchParams: Prom
                           {me ? " (tú)" : ""}
                         </td>
                         <td className="td text-right font-mono font-semibold">{Math.round(r.score)}</td>
-                        <td className="td text-right font-mono">{r.accuracy} %</td>
+                        <td className="td text-right font-mono">{pct(r.accuracy)}</td>
                         <td className="td text-right font-mono">{r.attempts}</td>
                       </tr>
                     );

@@ -52,6 +52,8 @@ export async function updateAlias(_prev: LoginState, form: FormData): Promise<Lo
   const { student } = await requireStudent();
   const alias = String(form.get("alias") ?? "").trim().replace(/\s+/g, " ");
   if (alias.length < 2 || alias.length > 20) return { error: "El alias debe tener entre 2 y 20 caracteres." };
+  const { data: same } = await db().from("students").select("id").eq("class_id", student.class_id).ilike("alias", alias.replace(/[%_]/g, "\\$&")).neq("id", student.id);
+  if (same && same.length) return { error: "Ese alias ya lo usa un compañero. Elige otro." };
   await db().from("students").update({ alias }).eq("id", student.id);
   revalidatePath("/", "layout");
   return {};
@@ -166,7 +168,7 @@ export async function submitTest(testId: string, payload: SubmitPayload): Promis
     await reopenRun(run.sessionId);
     return { ok: false, error: "No se pudo guardar la prueba. Vuelve a pulsar entregar o avisa al profesor antes de cerrar la página." };
   }
-  revalidatePath("/pruebas");
+  // Sin revalidar la pagina en curso: asi el alumno sigue viendo su resultado aunque fuera su ultimo intento
   // Mismo calculo que veran despues el alumno y el profesor
   const e = evaluate({ chars: s.chars, errors: s.errors, duration_ms: durationMs }, baremo);
   return { ok: true, chars: s.chars, errors: s.errors, netPpm: e.netPpm, grossPpm: e.grossPpm, accuracy: e.accuracy, flagged, grade: e.grade };

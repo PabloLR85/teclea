@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { endTeacherSession, requireTeacher, requireTeacherClass, startTeacherSession } from "@/lib/session";
-import { defaultAlias, madridLocalToIso, newClassCode, newPin, slugifyName } from "@/lib/utils";
+import { madridLocalToIso, newClassCode, newPin, slugifyName, uniqueAlias } from "@/lib/utils";
 import { findForm } from "@/lib/forms";
 import { testHasActivity } from "@/lib/tests";
 
@@ -94,15 +94,18 @@ export async function addStudents(classId: string, _prev: FormState, form: FormD
     .slice(0, 100);
   if (names.length === 0) return { error: "Escribe un nombre completo por línea." };
 
-  const { data: existing } = await db().from("students").select("username").eq("class_id", classId);
+  const { data: existing } = await db().from("students").select("username,alias").eq("class_id", classId);
   const taken = new Set((existing ?? []).map((s) => s.username as string));
+  const aliases = new Set((existing ?? []).map((s) => String(s.alias).toLowerCase()));
   const rows = names.map((full_name) => {
     const base = slugifyName(full_name);
     let username = base;
     let i = 2;
     while (taken.has(username)) username = `${base}${i++}`;
     taken.add(username);
-    return { class_id: classId, full_name, username, alias: defaultAlias(full_name), pin: newPin() };
+    const alias = uniqueAlias(full_name, aliases);
+    aliases.add(alias.toLowerCase());
+    return { class_id: classId, full_name, username, alias, pin: newPin() };
   });
   const { error } = await db().from("students").insert(rows);
   if (error) return { error: "No se pudieron dar de alta los alumnos." };
@@ -220,6 +223,8 @@ export async function updateStudent(classId: string, studentId: string, _prev: F
   const alias = String(form.get("alias") ?? "").trim().replace(/\s+/g, " ");
   if (full_name.length < 2) return { error: "Escribe el nombre completo." };
   if (alias.length < 2 || alias.length > 20) return { error: "El alias debe tener entre 2 y 20 caracteres." };
+  const { data: same } = await db().from("students").select("id").eq("class_id", classId).ilike("alias", alias.replace(/[%_]/g, "\\$&")).neq("id", studentId);
+  if (same && same.length) return { error: "Ese alias ya lo usa otro alumno de la clase." };
   await db().from("students").update({ full_name, alias }).eq("id", studentId).eq("class_id", classId);
   revalidatePath(`/profesor/clase/${classId}`);
   return { ok: "Alumno actualizado. Su usuario y su PIN no cambian." };

@@ -1,5 +1,6 @@
 "use client";
 
+import { n1, pct } from "@/lib/format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Keyboard } from "./Keyboard";
@@ -32,6 +33,7 @@ type Props = {
   // Ejercicios numericos: las cifras solo valen desde el bloque numerico
   numpadOnly?: boolean;
   allowNumpadToggle?: boolean; // en practica, el alumno puede desactivarlo si su teclado no tiene bloque numerico
+  doneLabel?: string; // texto del resultado ("Carrera terminada." en carreras)
 };
 
 function fmtTime(ms: number) {
@@ -59,6 +61,7 @@ export function TypingExercise({
   onDraft,
   numpadOnly,
   allowNumpadToggle,
+  doneLabel,
 }: Props) {
   const target = useMemo(() => targetRaw.normalize("NFC"), [targetRaw]);
   const [typed, setTyped] = useState(initialTyped ?? "");
@@ -217,8 +220,10 @@ export function TypingExercise({
     const box = textBoxRef.current;
     const cur = cursorRef.current;
     if (!box || !cur) return;
-    const lineHeight = cur.offsetHeight || 40;
-    const targetTop = Math.max(0, cur.offsetTop - lineHeight);
+    // Altura real de cada renglon (incluye el interlineado) para no dejar el renglon anterior cortado
+    const lineHeight = parseFloat(getComputedStyle(box).lineHeight) || cur.offsetHeight || 40;
+    const rowTop = cur.offsetTop - (lineHeight - cur.offsetHeight) / 2;
+    const targetTop = Math.max(0, Math.round(rowTop - lineHeight));
     if (Math.abs(box.scrollTop - targetTop) > lineHeight / 2) {
       box.scrollTo({ top: targetTop, behavior: "smooth" });
     }
@@ -279,7 +284,11 @@ export function TypingExercise({
 
           <div className="flex flex-col gap-2">
             <label htmlFor="escribe" className="label">
-              {mode === "prueba" ? "Escribe aquí. La prueba se entrega sola al acabar el tiempo." : "Escribe aquí el texto de arriba"}
+              {mode === "practica"
+                ? "Escribe aquí el texto de arriba"
+                : limitMs
+                  ? "Escribe aquí. Se entrega sola al acabar el tiempo."
+                  : "Escribe aquí. Se entrega sola al terminar el texto, o con «Entregar ahora»."}
             </label>
             <textarea
               id="escribe"
@@ -340,8 +349,8 @@ export function TypingExercise({
           {result && result.ok && (
             <div className="flex flex-col gap-3 rounded-xl bg-accent-soft px-5 py-4">
               <p className="m-0 text-[15px] text-accent-ink">
-                <strong>{mode === "prueba" ? "Prueba entregada." : "Ejercicio terminado."}</strong> {result.netPpm} pulsaciones netas por minuto,{" "}
-                {result.accuracy} % de precisión y {result.errors} {result.errors === 1 ? "error" : "errores"}.
+                <strong>{doneLabel ?? (mode === "prueba" ? "Prueba entregada." : "Ejercicio terminado.")}</strong> {n1(result.netPpm)} pulsaciones netas por minuto,{" "}
+                {pct(result.accuracy)} de precisión y {result.errors} {result.errors === 1 ? "error" : "errores"}.
                 {showGrade && result.grade !== undefined && (
                   <>
                     {" "}
@@ -403,7 +412,7 @@ export function TypingExercise({
         <div className="grid grid-cols-2 gap-4">
           <div className="card flex flex-col gap-1 p-[18px]">
             <span className="text-[13px] text-muted">Precisión</span>
-            <span className="font-display text-[28px] font-bold">{stats.precision} %</span>
+            <span className="whitespace-nowrap font-display text-[28px] font-bold">{stats.precision} %</span>
           </div>
           <div className="card flex flex-col gap-1 p-[18px]">
             <span className="text-[13px] text-muted">Errores</span>
@@ -417,7 +426,7 @@ export function TypingExercise({
           )}
           <div className="card flex flex-col gap-1 p-[18px]">
             <span className="text-[13px] text-muted">Avance</span>
-            <span className="font-display text-[28px] font-bold">{stats.progress} %</span>
+            <span className="whitespace-nowrap font-display text-[28px] font-bold">{stats.progress} %</span>
           </div>
         </div>
         <div className="card flex flex-col gap-2.5 p-[18px]">

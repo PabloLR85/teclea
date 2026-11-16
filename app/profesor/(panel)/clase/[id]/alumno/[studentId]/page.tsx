@@ -1,3 +1,4 @@
+import { pct } from "@/lib/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type StudentRow } from "@/lib/db";
@@ -78,7 +79,7 @@ export default async function AlumnoPage({ params }: { params: Promise<{ id: str
                     </td>
                     <td className="td text-muted">{formatDateTime(a.created_at)}</td>
                     <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
-                    <td className="td text-right font-mono">{e.accuracy} %</td>
+                    <td className="td text-right font-mono">{pct(e.accuracy)}</td>
                     <td className="td text-right font-mono">{a.mode === "prueba" ? formatGrade(e.grade) : "-"}</td>
                     <td className="td text-right">
                       <Link href={`/profesor/clase/${id}/intento/${a.id}`} className="font-semibold text-accent">Ver</Link>

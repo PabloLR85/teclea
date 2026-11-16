@@ -12,7 +12,9 @@ const num = (n: number | string) => String(n).replace(".", ",");
 
 function toCsv(rows: (string | number)[][]): string {
   const esc = (v: string | number) => {
-    const s = String(v);
+    let s = String(v);
+    // Evita que Excel interprete como formula un texto escrito por un alumno (alias "=...")
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   // BOM y punto y coma para que Excel en espanol lo abra bien.

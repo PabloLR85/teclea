@@ -1,3 +1,4 @@
+import { pct } from "@/lib/format";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
@@ -189,7 +190,7 @@ export default async function PracticarPage() {
                   </td>
                   <td className="td text-muted">{formatDateTime(a.created_at)}</td>
                   <td className="td text-right font-mono">{Math.round(e.netPpm)}</td>
-                  <td className="td text-right font-mono">{e.accuracy} %</td>
+                  <td className="td text-right font-mono">{pct(e.accuracy)}</td>
                 </tr>
                 );
               })}

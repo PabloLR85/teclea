@@ -55,25 +55,24 @@ export function FormReview({
                   return (
                     <tr key={d.key}>
                       <td className="td py-2 text-muted">{label(d.key)}</td>
-                      <td className="td py-2 font-mono">{d.expected}</td>
                       <td className="td py-2 font-mono">
-                        {d.typed === "" ? (
-                          <span className="rounded bg-error-soft px-1.5 text-error-ink">vacío</span>
-                        ) : d.errors === 0 ? (
-                          <span className="text-ink">{d.typed}</span>
-                        ) : (
-                          <span>
-                            {d.expected.split("").map((ch, i) =>
-                              i < a.consumed && a.status[i] === ST_OK ? (
+                        {d.errors === 0
+                          ? d.expected
+                          : d.expected.split("").map((ch, i) =>
+                              d.typed !== "" && i < a.consumed && a.status[i] === ST_OK ? (
                                 <span key={i}>{ch}</span>
                               ) : (
-                                <span key={i} className="rounded bg-error-soft text-error">
+                                <span key={i} className="rounded bg-error-soft text-error" title="Aquí está el fallo">
                                   {ch === " " ? "_" : ch}
                                 </span>
                               ),
                             )}
-                            <span className="ml-2 text-xs text-soft">(escrito: {d.typed})</span>
-                          </span>
+                      </td>
+                      <td className="td py-2 font-mono">
+                        {d.typed === "" ? (
+                          <span className="rounded bg-error-soft px-1.5 text-error-ink">vacío</span>
+                        ) : (
+                          <span className={d.errors ? "font-semibold text-error-ink" : "text-ink"}>{d.typed}</span>
                         )}
                       </td>
                       <td className={`td py-2 text-right font-mono ${d.errors ? "font-semibold text-error" : "text-soft"}`}>{d.errors}</td>

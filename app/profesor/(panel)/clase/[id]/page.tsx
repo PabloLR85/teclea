@@ -1,3 +1,4 @@
+import { minutesLabel, pct } from "@/lib/format";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, type AttemptRow, type StudentRow, type TestRow } from "@/lib/db";
@@ -162,7 +163,7 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
                     <td className="td">{s.alias}</td>
                     <td className="td text-right font-mono">{doneCount.get(s.id) ?? 0}/{ALL_LESSONS.length}</td>
                     <td className="td text-right font-mono">{weekBest.has(s.id) ? Math.round(weekBest.get(s.id)!) : "-"}</td>
-                    <td className="td text-right font-mono">{minutes7.get(s.id) ?? 0} min</td>
+                    <td className="td text-right font-mono">{minutesLabel(minutes7.get(s.id) ?? 0)}</td>
                     <td className="td text-sm text-muted">{s.last_seen_at ? formatDateTime(s.last_seen_at) : "Nunca"}</td>
                     <td className="td">
                       <div className="flex items-center justify-end gap-1.5">
@@ -231,8 +232,10 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
   for (const a of att ?? []) deliveredSets.set(a.test_id, (deliveredSets.get(a.test_id) ?? new Set()).add(a.student_id));
   const delivered = new Map([...deliveredSets].map(([k, v]) => [k, v.size]));
   const now = Date.now();
-  const defaultOpen = isoToMadridLocal(new Date(Math.ceil(now / 900000) * 900000).toISOString());
-  const defaultClose = isoToMadridLocal(new Date(Math.ceil(now / 900000) * 900000 + 2 * 3600000).toISOString());
+  // Por defecto la prueba queda abierta desde ya (minuto en curso) durante 2 horas
+  const startMin = Math.floor(now / 60000) * 60000;
+  const defaultOpen = isoToMadridLocal(new Date(startMin).toISOString());
+  const defaultClose = isoToMadridLocal(new Date(startMin + 2 * 3600000).toISOString());
 
   return (
     <div className="flex flex-wrap items-start gap-6">
@@ -425,7 +428,7 @@ async function ResultadosTab({
                   </td>
                   <td className="td text-right font-mono">{ev ? Math.round(ev.grossPpm) : "-"}</td>
                   <td className="td text-right font-mono">{a ? a.errors : "-"}</td>
-                  <td className="td text-right font-mono">{ev ? `${ev.accuracy} %` : "-"}</td>
+                  <td className="td text-right font-mono">{ev ? pct(ev.accuracy) : "-"}</td>
                   <td className="td text-right font-mono font-semibold">{ev ? Math.round(ev.netPpm) : "-"}</td>
                   <td className="td text-right">
                     {a && grade !== null ? (

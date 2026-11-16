@@ -1,3 +1,4 @@
+import { minutesLabel, pct as pctFmt } from "@/lib/format";
 import { KEY_ROWS } from "@/lib/keys";
 import { MIN_KEY_SAMPLES, type Progress } from "@/lib/progress";
 
@@ -217,14 +218,15 @@ function roundedTop(x: number, y: number, w: number, h: number) {
 export function ProgressView({ progress }: { progress: Progress }) {
   const withData = progress.weeks.filter((w) => w.count > 0);
   const maxNet = Math.max(50, ...withData.map((w) => w.avgNet));
-  const netStep = maxNet <= 100 ? 20 : maxNet <= 200 ? 25 : 50;
+  // Paso "redondo" para que haya como mucho 5 divisiones en el eje
+  const netStep = [10, 20, 25, 50, 100, 200, 250, 500].find((st) => maxNet / st <= 5) ?? 1000;
   const netTop = Math.ceil(maxNet / netStep) * netStep;
   return (
     <div className="flex flex-col gap-5">
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="card flex flex-col gap-1 p-[18px]">
           <span className="text-[13px] text-muted">Práctica últimos 7 días</span>
-          <span className="font-display text-[28px] font-bold">{progress.totals.minutes7} min</span>
+          <span className="font-display text-[28px] font-bold">{minutesLabel(progress.totals.ms7)}</span>
         </div>
         <div className="card flex flex-col gap-1 p-[18px]">
           <span className="text-[13px] text-muted">Práctica total (4 meses)</span>
@@ -292,7 +294,7 @@ export function ProgressView({ progress }: { progress: Progress }) {
                   <td className="td py-2 text-right font-mono">{w.count}</td>
                   <td className="td py-2 text-right font-mono">{w.count ? Math.round(w.avgNet) : "-"}</td>
                   <td className="td py-2 text-right font-mono">{w.count ? Math.round(w.bestNet) : "-"}</td>
-                  <td className="td py-2 text-right font-mono">{w.count ? `${w.avgAcc} %` : "-"}</td>
+                  <td className="td py-2 text-right font-mono">{w.count ? pctFmt(w.avgAcc) : "-"}</td>
                 </tr>
               ))}
             </tbody>
