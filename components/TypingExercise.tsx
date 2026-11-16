@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Keyboard } from "./Keyboard";
 import { useNumpadSetting } from "./useNumpadSetting";
-import { numpadKey } from "@/lib/keys";
+import { isNumpadDecimal, numpadKey } from "@/lib/keys";
 import type { SubmitResult } from "@/app/actions/alumno";
 import { align, MAX_EXTRA, normalizeTyped, ST_MISSING, ST_OK, ST_WRONG, type InputEvent } from "@/lib/scoring";
 
@@ -157,7 +157,16 @@ export function TypingExercise({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (!numpad.active || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // La tecla decimal del bloque numerico escribe siempre el separador que toca en el texto:
+    // coma (lo normal en importes), o punto solo si el texto pide punto en ese sitio.
+    if (isNumpadDecimal(e.key, e.code)) {
+      e.preventDefault();
+      const expected = target[alignment.consumed];
+      insertAtCaret(expected === "." ? "." : ",");
+      return;
+    }
+    if (!numpad.active) return;
     const r = numpadKey(e.key, e.code);
     if (r === "ok") {
       if (numpadMsg) setNumpadMsg(null);

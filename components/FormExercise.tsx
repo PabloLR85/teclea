@@ -7,7 +7,7 @@ import { normalizeTyped, sameText, type InputEvent } from "@/lib/scoring";
 import type { SubmitResult } from "@/lib/attempts";
 import { FormReview } from "./FormReview";
 import { useNumpadSetting } from "./useNumpadSetting";
-import { numpadKey } from "@/lib/keys";
+import { isNumpadDecimal, numpadKey } from "@/lib/keys";
 
 export type FormPayload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number; rejections: FormRejection[] };
 export type FormDraft = { answers: FormAnswers; current: number; events: InputEvent[]; rejections: FormRejection[] };
@@ -89,7 +89,18 @@ export function FormExercise({
   }, [answers, current, onDraft]);
 
   function onNumericKeyDown(key: string, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!numpad.active || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // En los campos de cifras la tecla decimal del bloque numerico escribe siempre coma
+    if (isNumpadDecimal(e.key, e.code)) {
+      e.preventDefault();
+      const el = e.currentTarget;
+      const v = answers[current]?.[key] ?? "";
+      const a = el.selectionStart ?? v.length;
+      const b = el.selectionEnd ?? v.length;
+      onField(key, v.slice(0, a) + "," + v.slice(b));
+      return;
+    }
+    if (!numpad.active) return;
     const r = numpadKey(e.key, e.code);
     if (r === "ok") {
       if (numpadMsg) setNumpadMsg(null);
