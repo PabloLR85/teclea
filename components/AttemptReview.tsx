@@ -22,7 +22,8 @@ const fmt = (n: number) => String(n).replace(".", ",");
 
 // Ficha de resultado de un intento. La usan igual el alumno y el profesor,
 // para que los dos vean exactamente las mismas cifras y la misma correccion.
-export function AttemptReview({ target, typed, chars, errors, durationMs, result, showGrade, flagged }: Props) {
+export function AttemptReview({ target: targetRaw, typed, chars, errors, durationMs, result, showGrade, flagged }: Props) {
+  const target = targetRaw.normalize("NFC");
   const stored = parseStoredForm(typed);
   const a = typed !== null && !stored ? align(target, typed) : null;
   const tiles = [
@@ -69,16 +70,25 @@ export function AttemptReview({ target, typed, chars, errors, durationMs, result
           <div className={`flex flex-wrap gap-4 text-[13px] text-muted ${stored ? "hidden" : ""}`}>
             <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-error-soft ring-1 ring-error" /> Tecla equivocada</span>
             <span className="flex items-center gap-1.5"><span className="rounded bg-error-soft px-1 font-mono text-error underline decoration-dotted">a</span> Carácter saltado</span>
+            <span className="flex items-center gap-1.5"><span className="inline-block h-3.5 w-[3px] rounded bg-error" /> Carácter de más</span>
             <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-line" /> Sin llegar a escribir</span>
           </div>
         </div>
         {stored ? (
-          <FormReview formId={stored.form} answers={stored.answers} submitted={stored.submitted} />
+          <FormReview formId={stored.form} answers={stored.answers} submitted={stored.submitted} rejections={stored.rejections} />
         ) : a ? (
           <div className="whitespace-pre-wrap font-mono text-[17px] leading-[1.8]">
             {target.split("").map((ch, i) => {
               if (i >= a.consumed) return <span key={i} className="text-faint">{ch}</span>;
               const st = a.status[i];
+              if (a.extraBefore[i] > 0) {
+                return (
+                  <span key={i}>
+                    <span className="mx-px inline-block h-[1.1em] w-[3px] translate-y-[3px] rounded bg-error" title="Carácter de más" />
+                    {st === ST_OK ? <span className="text-ink">{ch}</span> : <span className="rounded bg-error-soft text-error">{ch === " " ? "_" : ch}</span>}
+                  </span>
+                );
+              }
               if (st === ST_OK) return <span key={i} className="text-ink">{ch}</span>;
               if (st === ST_MISSING)
                 return (

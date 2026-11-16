@@ -1,8 +1,20 @@
-import { findForm, scoreForm, type FormAnswers } from "@/lib/forms";
+import { findForm, rejectionErrors, scoreForm, type FormAnswers, type FormRejection } from "@/lib/forms";
 import { align, ST_OK } from "@/lib/scoring";
 
 // Correccion de un ejercicio de formulario: dato esperado frente a lo grabado, campo a campo.
-export function FormReview({ formId, answers, submitted, recordLimit }: { formId: string; answers: FormAnswers; submitted: number; recordLimit?: number }) {
+export function FormReview({
+  formId,
+  answers,
+  submitted,
+  recordLimit,
+  rejections,
+}: {
+  formId: string;
+  answers: FormAnswers;
+  submitted: number;
+  recordLimit?: number;
+  rejections?: FormRejection[];
+}) {
   const t = findForm(formId);
   if (!t) return <p className="m-0 text-sm text-muted">Formulario no disponible.</p>;
   const { detail } = scoreForm(t, answers, submitted, recordLimit);
@@ -11,8 +23,15 @@ export function FormReview({ formId, answers, submitted, recordLimit }: { formId
 
   if (records.length === 0) return <p className="m-0 text-sm text-muted">No se grabó ningún dato.</p>;
 
+  const rejected = rejections?.length ?? 0;
   return (
     <div className="flex flex-col gap-4">
+      {rejected > 0 && (
+        <p className="m-0 rounded-xl bg-error-soft px-4 py-3 text-sm text-error-ink">
+          Grabaciones rechazadas por datos incorrectos: <strong>{rejected}</strong>. Errores sumados por esos intentos:{" "}
+          <strong>{rejectionErrors(t, rejections!)}</strong>.
+        </p>
+      )}
       {records.map((r) => (
         <div key={r} className="overflow-x-auto rounded-xl border border-line">
           <div className="border-b border-line bg-ground px-4 py-2 text-[13px] font-semibold text-body">

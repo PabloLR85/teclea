@@ -107,7 +107,7 @@ const ALPHA_FULL: BankText[] = [
     id: "texto-archivo",
     category: "Alfabético completo",
     label: "Organización del archivo",
-    text: "Un archivo ordenado ahorra horas de trabajo. Cada documento debe tener un sitio fijo y fácil de encontrar. Lo habitual es clasificar primero por tipo de documento y después por fecha o por número. Las carpetas se rotulan con letra clara y siempre con el mismo criterio: por ejemplo, «Facturas de proveedores, noviembre de 2026». Antes de archivar un papel hay que comprobar que ya está grabado y marcarlo con una señal o un sello. Así nadie lo vuelve a introducir por error. Los expedientes que se consultan a menudo se guardan a mano; los antiguos, en el archivo general. Cada año se revisa qué documentos pueden destruirse, según los plazos que marque la empresa. Cuando todo el equipo sigue las mismas normas, cualquiera encuentra lo que busca en pocos segundos.",
+    text: "Un archivo ordenado ahorra horas de trabajo. Cada documento debe tener un sitio fijo y fácil de encontrar. Lo habitual es clasificar primero por tipo de documento y después por fecha o por número. Las carpetas se rotulan con letra clara y siempre con el mismo criterio: por ejemplo, \"Facturas de proveedores, noviembre de 2026\". Antes de archivar un papel hay que comprobar que ya está grabado y marcarlo con una señal o un sello. Así nadie lo vuelve a introducir por error. Los expedientes que se consultan a menudo se guardan a mano; los antiguos, en el archivo general. Cada año se revisa qué documentos pueden destruirse, según los plazos que marque la empresa. Cuando todo el equipo sigue las mismas normas, cualquiera encuentra lo que busca en pocos segundos.",
   },
   {
     id: "texto-cliente",
@@ -124,7 +124,7 @@ const DATA_TEXTS: BankText[] = ["cliente", "pedido", "factura"].map((id) => {
     id: `datos-${id}`,
     category: "Datos de grabación",
     label: `${f.title} (texto continuo)`,
-    text: f.records.map((r) => f.doc(r).join(" ")).join(" "),
+    text: f.records.map((r) => f.doc(r).join(" ")).join(" ").replace(/\s+/g, " "),
   };
 });
 

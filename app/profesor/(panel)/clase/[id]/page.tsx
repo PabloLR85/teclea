@@ -9,6 +9,8 @@ import { getRanking } from "@/lib/ranking";
 import { formatDateTime, isoToMadridLocal } from "@/lib/utils";
 import {
   addStudents,
+  renameClass,
+  updateStudent,
   allowRetake,
   closeTestNow,
   createTest,
@@ -55,7 +57,18 @@ export default async function ClasePage({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <Link href="/profesor" className="text-[13px] font-semibold text-accent">Tus clases</Link>
-          <h1 className="h1 m-0">{klass.name}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="h1 m-0">{klass.name}</h1>
+            <details className="relative">
+              <summary className="cursor-pointer list-none rounded-lg px-2 py-1 text-sm font-semibold text-accent hover:bg-accent-soft">Cambiar nombre</summary>
+              <div className="absolute left-0 z-10 mt-2 w-80 rounded-xl border border-line bg-white p-4 shadow-lg">
+                <ActionForm action={renameClass.bind(null, id)} submitLabel="Guardar">
+                  <label htmlFor="class-name" className="label">Nombre de la clase</label>
+                  <input id="class-name" name="name" required defaultValue={klass.name} className="field" />
+                </ActionForm>
+              </div>
+            </details>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted">
           Código de clase
@@ -143,6 +156,21 @@ async function AlumnosTab({ classId, students }: { classId: string; students: St
                     <td className="td text-sm text-muted">{s.last_seen_at ? formatDateTime(s.last_seen_at) : "Nunca"}</td>
                     <td className="td">
                       <div className="flex items-center justify-end gap-1.5">
+                        <details className="relative">
+                          <summary className="btn btn-secondary h-9 cursor-pointer list-none px-3 text-[13px]">Editar</summary>
+                          <div className="absolute right-0 z-10 mt-2 w-80 rounded-xl border border-line bg-white p-4 text-left shadow-lg">
+                            <ActionForm action={updateStudent.bind(null, classId, s.id)} submitLabel="Guardar">
+                              <div className="flex flex-col gap-1.5">
+                                <label htmlFor={`fn-${s.id}`} className="label">Nombre completo</label>
+                                <input id={`fn-${s.id}`} name="full_name" required defaultValue={s.full_name} className="field" />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <label htmlFor={`al-${s.id}`} className="label">Alias en el ranking</label>
+                                <input id={`al-${s.id}`} name="alias" required maxLength={20} defaultValue={s.alias} className="field" />
+                              </div>
+                            </ActionForm>
+                          </div>
+                        </details>
                         <form action={resetPin.bind(null, classId, s.id)}>
                           <button type="submit" className="btn btn-secondary h-9 px-3 text-[13px]">Nuevo PIN</button>
                         </form>
@@ -217,6 +245,7 @@ async function PruebasTab({ classId, studentCount }: { classId: string; studentC
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link href={`/profesor/clase/${classId}?tab=resultados&prueba=${t.id}`} className="btn btn-primary h-10">Ver resultados</Link>
+                  <Link href={`/profesor/clase/${classId}/prueba/${t.id}`} className="btn btn-secondary h-10">Editar</Link>
                   {open && (
                     <form action={closeTestNow.bind(null, classId, t.id)}>
                       <button type="submit" className="btn btn-secondary h-10">Cerrar ahora</button>

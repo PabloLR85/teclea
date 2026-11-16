@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { endTeacherSession, requireTeacher, requireTeacherClass, startTeacherSession } from "@/lib/session";
 import { defaultAlias, madridLocalToIso, newClassCode, newPin, slugifyName } from "@/lib/utils";
 import { findForm } from "@/lib/forms";
+import { testHasActivity } from "@/lib/tests";
 
 export type FormState = { error?: string; ok?: string };
 
@@ -123,8 +124,9 @@ export async function deleteStudent(classId: string, studentId: string) {
 
 // ---------- Pruebas ----------
 
-export async function createTest(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
-  await requireTeacherClass(classId);
+type ParsedTest = { title: string; content: string; duration_sec: number; opens_at: string; closes_at: string };
+
+function parseTestForm(form: FormData): ParsedTest | { error: string } {
   const title = String(form.get("title") ?? "").trim();
   const kind = String(form.get("kind") ?? "texto");
   const formId = String(form.get("form_id") ?? "");
@@ -132,6 +134,7 @@ export async function createTest(classId: string, _prev: FormState, form: FormDa
     kind === "formulario"
       ? `form:${formId}`
       : String(form.get("content") ?? "")
+          .normalize("NFC")
           .replace(/\r?\n+/g, " ")
           .replace(/\s+/g, " ")
           .trim();
@@ -146,12 +149,60 @@ export async function createTest(classId: string, _prev: FormState, form: FormDa
   const opens_at = madridLocalToIso(opens);
   const closes_at = madridLocalToIso(closes);
   if (Date.parse(closes_at) <= Date.parse(opens_at)) return { error: "El cierre debe ser posterior a la apertura." };
-  const { error } = await db()
-    .from("tests")
-    .insert({ class_id: classId, title, content, duration_sec: Math.round(durationMin * 60), opens_at, closes_at });
+  return { title, content, duration_sec: Math.round(durationMin * 60), opens_at, closes_at };
+}
+
+export async function createTest(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireTeacherClass(classId);
+  const parsed = parseTestForm(form);
+  if ("error" in parsed) return parsed;
+  const { error } = await db().from("tests").insert({ class_id: classId, ...parsed });
   if (error) return { error: "No se pudo crear la prueba." };
   revalidatePath(`/profesor/clase/${classId}`);
   return { ok: "Prueba creada." };
+}
+
+export async function updateTest(classId: string, testId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireTeacherClass(classId);
+  const { data: current } = await db().from("tests").select("*").eq("id", testId).eq("class_id", classId).maybeSingle();
+  if (!current) return { error: "Prueba no encontrada." };
+  const locked = await testHasActivity(testId);
+  if (locked) {
+    // Se conservan el texto y la duracion actuales
+    form.set("kind", String(current.content).startsWith("form:") ? "formulario" : "texto");
+    form.set("form_id", String(current.content).startsWith("form:") ? String(current.content).slice(5) : "");
+    form.set("content", String(current.content));
+    form.set("duration", String(current.duration_sec / 60));
+  }
+  const parsed = parseTestForm(form);
+  if ("error" in parsed) return parsed;
+  const { error } = await db().from("tests").update(parsed).eq("id", testId).eq("class_id", classId);
+  if (error) return { error: "No se pudieron guardar los cambios." };
+  revalidatePath(`/profesor/clase/${classId}`);
+  return { ok: locked ? "Cambios guardados. El texto y la duración no se han tocado porque ya hay alumnos que la han hecho." : "Cambios guardados." };
+}
+
+// ---------- Clase y alumnos: edicion ----------
+
+export async function renameClass(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireTeacherClass(classId);
+  const name = String(form.get("name") ?? "").trim();
+  if (!name) return { error: "Pon un nombre a la clase." };
+  await db().from("classes").update({ name }).eq("id", classId);
+  revalidatePath(`/profesor/clase/${classId}`);
+  revalidatePath("/profesor");
+  return { ok: "Nombre guardado." };
+}
+
+export async function updateStudent(classId: string, studentId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireTeacherClass(classId);
+  const full_name = String(form.get("full_name") ?? "").trim().replace(/\s+/g, " ");
+  const alias = String(form.get("alias") ?? "").trim().replace(/\s+/g, " ");
+  if (full_name.length < 2) return { error: "Escribe el nombre completo." };
+  if (alias.length < 2 || alias.length > 20) return { error: "El alias debe tener entre 2 y 20 caracteres." };
+  await db().from("students").update({ full_name, alias }).eq("id", studentId).eq("class_id", classId);
+  revalidatePath(`/profesor/clase/${classId}`);
+  return { ok: "Alumno actualizado. Su usuario y su PIN no cambian." };
 }
 
 export async function closeTestNow(classId: string, testId: string) {

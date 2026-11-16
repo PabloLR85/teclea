@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Keyboard } from "./Keyboard";
 import type { SubmitResult } from "@/app/actions/alumno";
-import { align, MAX_EXTRA, ST_MISSING, ST_OK, ST_WRONG, type InputEvent } from "@/lib/scoring";
+import { align, MAX_EXTRA, normalizeTyped, ST_MISSING, ST_OK, ST_WRONG, type InputEvent } from "@/lib/scoring";
 
 type Props = {
   target: string;
@@ -29,7 +29,7 @@ function fmtTime(ms: number) {
 }
 
 export function TypingExercise({
-  target,
+  target: targetRaw,
   mode,
   limitMs,
   onSubmit,
@@ -42,6 +42,7 @@ export function TypingExercise({
   forceFinish,
   hideKeyboard,
 }: Props) {
+  const target = useMemo(() => targetRaw.normalize("NFC"), [targetRaw]);
   const [typed, setTyped] = useState("");
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -96,7 +97,7 @@ export function TypingExercise({
 
   function onChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     if (finishedRef.current) return;
-    const value = e.target.value.replace(/\n/g, "").slice(0, target.length + MAX_EXTRA);
+    const value = normalizeTyped(e.target.value.replace(/\n/g, "")).slice(0, target.length + MAX_EXTRA);
     let start = startedAt;
     if (!start) {
       start = Date.now();
@@ -168,6 +169,21 @@ export function TypingExercise({
             {target.split("").map((ch, i) => {
               if (i < cursor) {
                 const st = alignment.status[i];
+                const extra = alignment.extraBefore[i] > 0 && (
+                  <span
+                    key={`x${i}`}
+                    className="mx-px inline-block h-[1.1em] w-[3px] translate-y-[3px] rounded bg-error"
+                    title="Has escrito un carácter de más aquí"
+                  />
+                );
+                if (extra) {
+                  return (
+                    <span key={i}>
+                      {extra}
+                      {st === ST_OK ? <span className="text-ink">{ch}</span> : <span className="rounded bg-error-soft text-error">{ch === " " ? "_" : ch}</span>}
+                    </span>
+                  );
+                }
                 if (st === ST_OK) return <span key={i} className="text-ink">{ch}</span>;
                 if (st === ST_MISSING)
                   return (

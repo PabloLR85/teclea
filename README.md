@@ -64,7 +64,7 @@ Los alumnos entran en la página principal con código de clase, usuario y PIN.
 
 - **Practicar:** 6 niveles y 19 lecciones (fila guía, fila superior, fila inferior, teclado numérico, mayúsculas y tildes, fichas de datos). Una lección se supera completando el texto con al menos un 90 % de precisión, y eso desbloquea la siguiente.
 - **Pruebas:** un solo intento, dentro de la franja horaria que marques. El reloj empieza al pulsar "Empezar" y sigue corriendo aunque se recargue la página. Al acabar el tiempo se entrega sola.
-- **Formularios:** 5 plantillas (alta de cliente, pedido, factura de proveedor, encuesta e inventario). El documento original sale a la izquierda y el formulario a la derecha. Se corrige campo a campo.
+- **Formularios:** 5 plantillas (alta de cliente, pedido, factura de proveedor, encuesta e inventario). El documento original sale a la izquierda y el formulario a la derecha. Se corrige campo a campo. Al pulsar Intro, en práctica el registro solo se graba si está completo y exacto (los intentos con datos mal escritos suman errores); en pruebas, si está completo y con formato válido (CP, NIF, CIF, teléfono, correo, fecha, importes).
 - **Carrera:** salas en directo que abre el profesor. Cuenta atrás, barras de avance de todos y clasificación final.
 - **Ranking:** semanal (mejor marca desde el lunes) y general (media de las 5 mejores marcas). Solo cuentan ejercicios de 50 caracteres o más. Aparece el alias, nunca el nombre real.
 - **Perfil:** cada alumno puede cambiar su alias.
@@ -88,6 +88,12 @@ netas/min = (pulsaciones − errores × penalización) / minutos
 - Si la precisión no llega al mínimo, la nota máxima es 4.
 
 Valores iniciales: 5 desde 120 netas/min, 10 desde 250, precisión mínima 95 %, penalización 5.
+
+### Corrección
+
+- Lo escrito se compara con el original por alineación: un carácter saltado, de más o equivocado cuenta como un solo error y no arrastra al resto. Se tolera saltarse o repetir hasta 120 caracteres seguidos (una línea).
+- Se consideran la misma tecla las comillas « » “ ” y ", los apóstrofos ’ y ', el º y el °, los guiones largos y el -, y los espacios especiales. Las tildes se normalizan para que no dependan del teclado o del sistema.
+- En formularios no cuentan los espacios al principio o al final de un campo.
 
 ### Seguridad y antitrampas
 

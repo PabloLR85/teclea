@@ -1,9 +1,10 @@
-import { align } from "./scoring";
+import { align, sameText } from "./scoring";
 
 // Ejercicios de formulario: el alumno lee un documento (izquierda) y rellena el formulario (derecha).
 // Todos los datos son ficticios.
 
-export type FormField = { key: string; label: string; numeric?: boolean; wide?: boolean };
+export type FieldFormat = "cp" | "nif" | "cif" | "email" | "date" | "phone" | "money" | "int" | "rating" | "yesno";
+export type FormField = { key: string; label: string; numeric?: boolean; wide?: boolean; format?: FieldFormat };
 export type FormRecord = Record<string, string>;
 export type FormTemplate = {
   id: string;
@@ -85,12 +86,12 @@ export const FORMS: FormTemplate[] = [
     fields: [
       { key: "nombre", label: "Nombre" },
       { key: "apellidos", label: "Apellidos" },
-      { key: "nif", label: "NIF" },
+      { key: "nif", label: "NIF", format: "nif" },
       { key: "direccion", label: "Dirección", wide: true },
-      { key: "cp", label: "Código postal", numeric: true },
+      { key: "cp", label: "Código postal", numeric: true, format: "cp" },
       { key: "localidad", label: "Localidad" },
-      { key: "telefono", label: "Teléfono", numeric: true },
-      { key: "email", label: "Correo electrónico", wide: true },
+      { key: "telefono", label: "Teléfono", numeric: true, format: "phone" },
+      { key: "email", label: "Correo electrónico", wide: true, format: "email" },
     ],
     records: CLIENTES.map(([nombre, apellidos, nif, direccion, cp, localidad, telefono, email]) => ({
       nombre, apellidos, nif, direccion, cp, localidad, telefono, email,
@@ -107,14 +108,14 @@ export const FORMS: FormTemplate[] = [
     description: "Hojas de pedido. Copia los datos y fíjate bien en referencias e importes.",
     docTitle: "Hoja de pedido",
     fields: [
-      { key: "numero", label: "Nº de pedido", numeric: true },
-      { key: "fecha", label: "Fecha", numeric: true },
+      { key: "numero", label: "Nº de pedido", numeric: true, format: "int" },
+      { key: "fecha", label: "Fecha", numeric: true, format: "date" },
       { key: "cliente", label: "Cliente", wide: true },
       { key: "referencia", label: "Referencia" },
       { key: "descripcion", label: "Descripción", wide: true },
-      { key: "cantidad", label: "Unidades", numeric: true },
-      { key: "precio", label: "Precio unidad (€)", numeric: true },
-      { key: "total", label: "Total (€)", numeric: true },
+      { key: "cantidad", label: "Unidades", numeric: true, format: "int" },
+      { key: "precio", label: "Precio unidad (€)", numeric: true, format: "money" },
+      { key: "total", label: "Total (€)", numeric: true, format: "money" },
     ],
     records: PEDIDOS.map(([numero, fecha, cliente, referencia, descripcion, cantidad, precio]) => ({
       numero, fecha, cliente, referencia, descripcion, cantidad: String(cantidad), precio: eur(precio), total: eur(cantidad * precio),
@@ -124,7 +125,7 @@ export const FORMS: FormTemplate[] = [
       `Fecha: ${r.fecha}`,
       `Cliente: ${r.cliente}`,
       `Artículo: ${r.descripcion} (ref. ${r.referencia})`,
-      `Unidades: ${r.cantidad}   Precio por unidad: ${r.precio} €`,
+      `Unidades: ${r.cantidad}. Precio por unidad: ${r.precio} €`,
       `TOTAL PEDIDO: ${r.total} €`,
     ],
   },
@@ -135,12 +136,12 @@ export const FORMS: FormTemplate[] = [
     docTitle: "Factura",
     fields: [
       { key: "proveedor", label: "Proveedor", wide: true },
-      { key: "cif", label: "CIF" },
+      { key: "cif", label: "CIF", format: "cif" },
       { key: "numero", label: "Nº de factura" },
-      { key: "fecha", label: "Fecha", numeric: true },
-      { key: "base", label: "Base imponible (€)", numeric: true },
-      { key: "iva", label: "IVA 21 % (€)", numeric: true },
-      { key: "total", label: "Total (€)", numeric: true },
+      { key: "fecha", label: "Fecha", numeric: true, format: "date" },
+      { key: "base", label: "Base imponible (€)", numeric: true, format: "money" },
+      { key: "iva", label: "IVA 21 % (€)", numeric: true, format: "money" },
+      { key: "total", label: "Total (€)", numeric: true, format: "money" },
     ],
     records: FACTURAS.map(([proveedor, cif, numero, fecha, base]) => {
       const iva = Math.round(base * 21) / 100;
@@ -149,7 +150,7 @@ export const FORMS: FormTemplate[] = [
     doc: (r) => [
       r.proveedor.toUpperCase(),
       `CIF: ${r.cif}`,
-      `Factura nº ${r.numero} · Fecha de emisión ${r.fecha}`,
+      `Factura nº ${r.numero}, fecha de emisión ${r.fecha}`,
       `Base imponible: ${r.base} €`,
       `IVA (21 %): ${r.iva} €`,
       `TOTAL A PAGAR: ${r.total} €`,
@@ -161,11 +162,11 @@ export const FORMS: FormTemplate[] = [
     description: "Encuestas en papel. Incluye un comentario libre que hay que copiar tal cual.",
     docTitle: "Encuesta",
     fields: [
-      { key: "fecha", label: "Fecha", numeric: true },
+      { key: "fecha", label: "Fecha", numeric: true, format: "date" },
       { key: "localidad", label: "Localidad" },
-      { key: "edad", label: "Edad", numeric: true },
-      { key: "valoracion", label: "Valoración (1-5)", numeric: true },
-      { key: "recomienda", label: "¿Recomendaría? (Sí/No)" },
+      { key: "edad", label: "Edad", numeric: true, format: "int" },
+      { key: "valoracion", label: "Valoración (1-5)", numeric: true, format: "rating" },
+      { key: "recomienda", label: "¿Recomendaría? (Sí/No)", format: "yesno" },
       { key: "comentario", label: "Comentario", wide: true },
     ],
     records: ENCUESTAS.map(([fecha, localidad, edad, valoracion, recomienda, comentario]) => ({
@@ -188,8 +189,8 @@ export const FORMS: FormTemplate[] = [
       { key: "referencia", label: "Referencia" },
       { key: "descripcion", label: "Artículo", wide: true },
       { key: "ubicacion", label: "Ubicación" },
-      { key: "unidades", label: "Unidades", numeric: true },
-      { key: "precio", label: "PVP (€)", numeric: true },
+      { key: "unidades", label: "Unidades", numeric: true, format: "int" },
+      { key: "precio", label: "PVP (€)", numeric: true, format: "money" },
     ],
     records: INVENTARIO.map(([referencia, descripcion, ubicacion, unidades, precio]) => ({
       referencia, descripcion, ubicacion, unidades, precio,
@@ -206,6 +207,34 @@ export function findForm(id: string): FormTemplate | null {
   return FORMS.find((f) => f.id === id) ?? null;
 }
 
+// ---------- Validacion al grabar ----------
+
+const FORMAT_RULES: Record<FieldFormat, { re: RegExp; msg: string }> = {
+  cp: { re: /^\d{5}$/, msg: "El código postal tiene 5 cifras." },
+  nif: { re: /^\d{8}[A-Z]$/, msg: "El NIF son 8 cifras y una letra mayúscula, sin espacios ni guiones." },
+  cif: { re: /^[A-Z]\d{8}$/, msg: "El CIF es una letra mayúscula y 8 cifras." },
+  email: { re: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, msg: "El correo debe tener la forma nombre@dominio.ext, sin espacios." },
+  date: { re: /^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/\d{4}$/, msg: "La fecha va como dd/mm/aaaa, por ejemplo 08/11/2026." },
+  phone: { re: /^\d{9}$/, msg: "El teléfono son 9 cifras seguidas, sin espacios." },
+  money: { re: /^\d+,\d{2}$/, msg: "El importe va con coma y dos decimales, por ejemplo 49,90." },
+  int: { re: /^\d+$/, msg: "Solo cifras, sin puntos ni espacios." },
+  rating: { re: /^[1-5]$/, msg: "Un número del 1 al 5." },
+  yesno: { re: /^(Sí|No)$/, msg: "Escribe Sí o No, con mayúscula y tilde." },
+};
+
+// Comprueba que el campo esta relleno y con un formato posible (sin mirar si el dato es el correcto).
+export function validateFormat(field: FormField, value: string): string | null {
+  const v = value.trim();
+  if (!v) return "Campo obligatorio.";
+  if (field.format && !FORMAT_RULES[field.format].re.test(v)) return FORMAT_RULES[field.format].msg;
+  return null;
+}
+
+// Practica: ademas del formato, el dato tiene que coincidir exactamente con el documento.
+export function validateExact(field: FormField, value: string, expected: string): string | null {
+  return validateFormat(field, value) ?? (sameText(value.trim(), expected) ? null : "No coincide con el documento. Revísalo letra a letra.");
+}
+
 // Registros que se usan en la practica (en las pruebas y carreras se usan todos).
 export const PRACTICE_RECORDS = 3;
 
@@ -214,7 +243,9 @@ export const PRACTICE_RECORDS = 3;
 export type FormAnswers = FormRecord[];
 
 // Errores de un campo: distancia de edicion completa (lo que falte al final tambien cuenta).
-export function fieldErrors(expected: string, typed: string): number {
+// Los espacios al principio o al final no cuentan: el programa de grabacion los quita al guardar.
+export function fieldErrors(expected: string, typedRaw: string): number {
+  const typed = typedRaw.trim();
   if (!typed) return expected.length;
   const a = align(expected, typed);
   return a.errors + (expected.length - a.consumed);
@@ -230,7 +261,7 @@ export function scoreForm(t: FormTemplate, answers: FormAnswers, submitted: numb
   const n = Math.min(answers.length, recordLimit, t.records.length);
   for (let r = 0; r < n; r++) {
     for (const f of t.fields) {
-      const typed = String(answers[r]?.[f.key] ?? "").slice(0, 200);
+      const typed = String(answers[r]?.[f.key] ?? "").slice(0, 200).trim();
       const expected = t.records[r][f.key];
       if (r < submitted || typed.length > 0) {
         const e = fieldErrors(expected, typed);
@@ -244,7 +275,22 @@ export function scoreForm(t: FormTemplate, answers: FormAnswers, submitted: numb
 }
 
 // Formato en que se guarda lo escrito en un intento de formulario
-export type StoredForm = { form: string; answers: FormAnswers; submitted: number };
+export type FormRejection = { record: number; values: FormRecord };
+export type StoredForm = { form: string; answers: FormAnswers; submitted: number; rejections?: FormRejection[] };
+
+// Practica: los datos mal grabados al pulsar Intro cuentan como errores aunque despues se corrijan.
+export function rejectionErrors(t: FormTemplate, rejections: FormRejection[]): number {
+  let errors = 0;
+  for (const rj of rejections.slice(0, 300)) {
+    const rec = t.records[rj.record];
+    if (!rec) continue;
+    for (const f of t.fields) {
+      const v = String(rj.values?.[f.key] ?? "").slice(0, 200);
+      if (v.trim() && !sameText(v.trim(), rec[f.key])) errors += fieldErrors(rec[f.key], v);
+    }
+  }
+  return errors;
+}
 
 export function parseStoredForm(typed: string | null): StoredForm | null {
   if (!typed || !typed.startsWith('{"form"')) return null;

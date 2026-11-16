@@ -5,8 +5,15 @@ import { FORMS } from "@/lib/forms";
 import { TextPicker } from "./TextPicker";
 
 // Tipo de prueba: copiar un texto o rellenar formularios
-export function TestContentFields() {
-  const [kind, setKind] = useState<"texto" | "formulario">("texto");
+export function TestContentFields({
+  defaultContent,
+  locked,
+}: {
+  defaultContent?: string; // contenido actual al editar ("form:xxx" o el texto)
+  locked?: boolean; // ya hay alumnos que la han hecho: no se puede cambiar
+}) {
+  const isForm = defaultContent?.startsWith("form:") ?? false;
+  const [kind, setKind] = useState<"texto" | "formulario">(isForm ? "formulario" : "texto");
   return (
     <div className="flex flex-col gap-4">
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -17,18 +24,37 @@ export function TestContentFields() {
               key={k}
               className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[10px] border border-line px-3.5 py-2.5 text-[15px] has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
             >
-              <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} className="h-4 w-4 accent-[#4338CA]" />
+              <input
+                type="radio"
+                name="kind"
+                value={k}
+                checked={kind === k}
+                onChange={() => setKind(k)}
+                disabled={locked}
+                className="h-4 w-4 accent-[#4338CA]"
+              />
               {k === "texto" ? "Copiar texto" : "Formularios"}
             </label>
           ))}
         </div>
       </fieldset>
       {kind === "texto" ? (
-        <TextPicker idPrefix="test" defaultTextId="texto-grabacion" />
+        <TextPicker
+          idPrefix="test"
+          defaultTextId="texto-grabacion"
+          defaultText={defaultContent && !isForm ? defaultContent : undefined}
+          disabled={locked}
+        />
       ) : (
         <div className="flex flex-col gap-2">
           <label htmlFor="form_id" className="label">Formulario</label>
-          <select id="form_id" name="form_id" defaultValue={FORMS[0].id} className="field text-[15px]">
+          <select
+            id="form_id"
+            name="form_id"
+            defaultValue={isForm ? defaultContent!.slice(5) : FORMS[0].id}
+            disabled={locked}
+            className="field text-[15px] disabled:bg-ground"
+          >
             {FORMS.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.title} · {f.records.length} registros

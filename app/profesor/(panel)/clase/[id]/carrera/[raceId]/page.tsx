@@ -5,7 +5,9 @@ import { requireTeacherClass } from "@/lib/session";
 import { loadRace, raceState } from "@/lib/races";
 import { evaluate, normalizeBaremo } from "@/lib/scoring";
 import { TeacherRaceRoom } from "@/components/TeacherRaceRoom";
-import { deleteRace, finishRace, startRace } from "@/app/actions/carrera";
+import { deleteRace, finishRace, startRace, updateRace } from "@/app/actions/carrera";
+import { ActionForm } from "@/components/ActionForm";
+import { TextPicker } from "@/components/TextPicker";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -40,6 +42,29 @@ export default async function ProfesorCarreraPage({ params }: { params: Promise<
             {Math.round(race.duration_sec / 60) || 1} min · {race.content.length} caracteres
           </span>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <details className="relative">
+          <summary className="btn btn-secondary cursor-pointer list-none">Editar</summary>
+          <div className="absolute right-0 z-10 mt-2 w-[min(92vw,460px)] rounded-xl border border-line bg-white p-5 shadow-lg">
+            <ActionForm action={updateRace.bind(null, id, raceId)} submitLabel="Guardar cambios">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="race-title" className="label">Título</label>
+                <input id="race-title" name="title" required defaultValue={race.title} className="field" />
+              </div>
+              {state.phase === "waiting" ? (
+                <>
+                  <TextPicker idPrefix="race-edit" defaultText={race.content} />
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="race-duration" className="label">Duración (minutos)</label>
+                    <input id="race-duration" name="duration" type="number" min={0.5} max={15} step={0.5} defaultValue={race.duration_sec / 60} required className="field" />
+                  </div>
+                </>
+              ) : (
+                <span className="text-[13px] text-soft">La carrera ya ha empezado: solo se puede cambiar el título.</span>
+              )}
+            </ActionForm>
+          </div>
+        </details>
         <details className="relative">
           <summary className="btn btn-danger cursor-pointer list-none">Eliminar carrera</summary>
           <div className="absolute right-0 z-10 mt-2 flex w-64 flex-col gap-3 rounded-xl border border-line bg-white p-4 text-sm shadow-lg">
@@ -49,6 +74,7 @@ export default async function ProfesorCarreraPage({ params }: { params: Promise<
             </form>
           </div>
         </details>
+        </div>
       </div>
 
       <TeacherRaceRoom

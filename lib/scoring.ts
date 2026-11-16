@@ -24,30 +24,67 @@ export type Score = {
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-// Margen de desajuste que se tolera entre lo escrito y el original (caracteres saltados o de mas).
-export const ALIGN_BAND = 40;
+// Margen de desajuste que se tolera entre lo escrito y el original: permite que el alumno
+// se salte una linea entera (o la repita) sin que el resto del texto se cuente como error.
+export const ALIGN_BAND = 120;
 // Lo escrito puede superar al original en este margen (caracteres de mas).
 export const MAX_EXTRA = 20;
 
 export const ST_PENDING = 0;
 export const ST_OK = 1;
-export const ST_WRONG = 2; // tecla equivocada o caracter de mas justo antes
+export const ST_WRONG = 2; // tecla equivocada
 export const ST_MISSING = 3; // caracter que el alumno se salto
 
 export type Alignment = {
   errors: number;
   consumed: number;
   status: Uint8Array; // un estado por caracter del original
+  extraBefore: Uint8Array; // caracteres de mas escritos justo antes de cada posicion del original (T + 1)
 };
+
+// Variantes que se consideran la misma tecla. Todas cambian un caracter por otro,
+// asi las posiciones del texto no se mueven.
+const EQUIV: Record<string, string> = {
+  "\u00ab": '"', "\u00bb": '"', "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+  "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'", "\u00b4": "'", "`": "'",
+  "\u00b0": "\u00ba", // grado y ordinal masculino: 2.º
+  "\u2013": "-", "\u2014": "-", "\u2212": "-", "\u2010": "-", "\u2011": "-",
+  "\u00a0": " ", "\u202f": " ", "\u2007": " ", "\t": " ",
+};
+
+// Normaliza lo escrito al llegar: composicion Unicode unica (una "a" con tilde es siempre
+// un solo caracter, venga del teclado que venga) y espacios especiales como espacio normal.
+export function normalizeTyped(s: string): string {
+  return s.normalize("NFC").replace(/[\u00a0\u202f\u2007\t]/g, " ");
+}
+
+function canon(s: string): string {
+  const n = s.normalize("NFC");
+  let out = "";
+  for (const ch of n) out += EQUIV[ch] ?? ch;
+  return out;
+}
+
+export function sameText(a: string, b: string): boolean {
+  return canon(a) === canon(b);
+}
+
+// Memoria reutilizada entre llamadas (se llama en cada pulsacion)
+let buffer = new Int32Array(0);
 
 // Alinea lo escrito con el original (distancia de edicion con banda).
 // Un caracter saltado o de mas cuenta como un solo error, sin arrastrar al resto del texto.
-export function align(target: string, typed: string, band = ALIGN_BAND): Alignment {
+export function align(targetRaw: string, typedRaw: string, band = ALIGN_BAND): Alignment {
+  const target = canon(targetRaw);
+  const typed = canon(typedRaw);
   const T = target.length;
   const n = typed.length;
   const W = 2 * band + 1;
   const INF = 1 << 29;
-  const D = new Int32Array((n + 1) * W).fill(INF);
+  const size = (n + 1) * W;
+  if (buffer.length < size) buffer = new Int32Array(Math.max(size, buffer.length * 2));
+  const D = buffer;
+  D.fill(INF, 0, size);
   const at = (i: number, j: number) => i * W + (j - i + band);
   const inBand = (i: number, j: number) => j >= 0 && j <= T && Math.abs(j - i) <= band;
 
@@ -55,11 +92,12 @@ export function align(target: string, typed: string, band = ALIGN_BAND): Alignme
   for (let i = 1; i <= n; i++) {
     const jFrom = Math.max(0, i - band);
     const jTo = Math.min(T, i + band);
+    const c = typed.charCodeAt(i - 1);
     for (let j = jFrom; j <= jTo; j++) {
       let best = INF;
       if (j === 0) best = i;
       else {
-        if (inBand(i - 1, j - 1)) best = D[at(i - 1, j - 1)] + (typed[i - 1] === target[j - 1] ? 0 : 1);
+        if (inBand(i - 1, j - 1)) best = D[at(i - 1, j - 1)] + (c === target.charCodeAt(j - 1) ? 0 : 1);
         if (inBand(i, j - 1)) best = Math.min(best, D[at(i, j - 1)] + 1);
       }
       if (inBand(i - 1, j)) best = Math.min(best, D[at(i - 1, j)] + 1);
@@ -71,41 +109,56 @@ export function align(target: string, typed: string, band = ALIGN_BAND): Alignme
   let endJ = Math.min(n, T);
   let endCost = inBand(n, endJ) ? D[at(n, endJ)] : INF;
   for (let j = Math.max(0, n - band); j <= Math.min(T, n + band); j++) {
-    const c = D[at(n, j)];
-    if (c < endCost || (c === endCost && Math.abs(j - n) < Math.abs(endJ - n))) {
-      endCost = c;
+    const cst = D[at(n, j)];
+    if (cst < endCost || (cst === endCost && Math.abs(j - n) < Math.abs(endJ - n))) {
+      endCost = cst;
       endJ = j;
     }
   }
 
+  // Reconstruccion: aciertos primero, luego tecla equivocada, salto y caracter de mas.
+  // Cada marca es exactamente un error: nunca se pinta de rojo una letra bien escrita.
   const status = new Uint8Array(T);
+  const extraBefore = new Uint8Array(T + 1);
   let i = n;
   let j = endJ;
   while (i > 0 || j > 0) {
     const cur = D[at(i, j)];
     if (i > 0 && j > 0 && inBand(i - 1, j - 1)) {
-      const cost = typed[i - 1] === target[j - 1] ? 0 : 1;
-      if (cur === D[at(i - 1, j - 1)] + cost) {
-        status[j - 1] = cost ? ST_WRONG : ST_OK;
+      const cost = typed.charCodeAt(i - 1) === target.charCodeAt(j - 1) ? 0 : 1;
+      if (cost === 0 && cur === D[at(i - 1, j - 1)]) {
+        status[j - 1] = ST_OK;
         i--;
         j--;
         continue;
       }
     }
+    if (i > 0 && j > 0 && inBand(i - 1, j - 1) && cur === D[at(i - 1, j - 1)] + 1) {
+      status[j - 1] = ST_WRONG;
+      i--;
+      j--;
+      continue;
+    }
+    if (j > 0 && inBand(i, j - 1) && cur === D[at(i, j - 1)] + 1) {
+      status[j - 1] = ST_MISSING;
+      j--;
+      continue;
+    }
     if (i > 0 && inBand(i - 1, j) && cur === D[at(i - 1, j)] + 1) {
-      // Caracter de mas: se marca el siguiente del original
-      if (j < T && status[j] === ST_OK) status[j] = ST_WRONG;
+      extraBefore[j] = Math.min(255, extraBefore[j] + 1);
       i--;
       continue;
     }
-    if (j > 0) {
+    // Bordes de la matriz
+    if (j === 0) {
+      extraBefore[0] = Math.min(255, extraBefore[0] + 1);
+      i--;
+    } else {
       status[j - 1] = ST_MISSING;
       j--;
-    } else {
-      i--;
     }
   }
-  return { errors: n === 0 ? 0 : endCost, consumed: endJ, status };
+  return { errors: n === 0 ? 0 : endCost, consumed: endJ, status, extraBefore };
 }
 
 export function computeScore(target: string, typed: string, durationMs: number, penalty: number): Score {

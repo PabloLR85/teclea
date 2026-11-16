@@ -4,10 +4,22 @@ import { useState } from "react";
 import { BANK_CATEGORIES, TEXT_BANK } from "@/lib/textBank";
 
 // Selector del banco de textos: al elegir uno, rellena el cuadro de texto, que se puede retocar.
-export function TextPicker({ name = "content", idPrefix, defaultTextId }: { name?: string; idPrefix: string; defaultTextId?: string }) {
-  const initial = TEXT_BANK.find((t) => t.id === defaultTextId);
+export function TextPicker({
+  name = "content",
+  idPrefix,
+  defaultTextId,
+  defaultText,
+  disabled,
+}: {
+  name?: string;
+  idPrefix: string;
+  defaultTextId?: string;
+  defaultText?: string;
+  disabled?: boolean;
+}) {
+  const initial = defaultText !== undefined ? TEXT_BANK.find((t) => t.text === defaultText) : TEXT_BANK.find((t) => t.id === defaultTextId);
   const [selected, setSelected] = useState(initial?.id ?? "");
-  const [text, setText] = useState(initial?.text ?? "");
+  const [text, setText] = useState(defaultText ?? initial?.text ?? "");
 
   return (
     <div className="flex flex-col gap-3">
@@ -16,6 +28,7 @@ export function TextPicker({ name = "content", idPrefix, defaultTextId }: { name
         <select
           id={`${idPrefix}-bank`}
           value={selected}
+          disabled={disabled}
           onChange={(e) => {
             setSelected(e.target.value);
             const t = TEXT_BANK.find((x) => x.id === e.target.value);
@@ -42,13 +55,14 @@ export function TextPicker({ name = "content", idPrefix, defaultTextId }: { name
           name={name}
           rows={6}
           value={text}
+          disabled={disabled}
           onChange={(e) => {
             setText(e.target.value);
             setSelected("");
           }}
-          className="w-full rounded-[10px] border border-line-strong bg-white px-3.5 py-3 font-mono text-sm"
+          className="w-full rounded-[10px] border border-line-strong bg-white px-3.5 py-3 font-mono text-sm disabled:bg-ground disabled:text-muted"
         />
-        <span className="text-[13px] text-soft">{text.length} caracteres. Puedes retocarlo antes de crear.</span>
+        <span className="text-[13px] text-soft">{text.length} caracteres.{disabled ? "" : " Puedes retocarlo antes de guardar."}</span>
       </div>
     </div>
   );

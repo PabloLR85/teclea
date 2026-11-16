@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import type { InputEvent } from "./scoring";
+import { normalizeTyped, type InputEvent } from "./scoring";
 
 // Inserta un intento. Si la base aun no tiene la columna "typed" (falta la migracion 2), lo guarda sin ella.
 export async function insertAttempt(row: Record<string, unknown>) {
@@ -33,5 +33,5 @@ export type SubmitResult =
 export function sanitize(p: SubmitPayload, maxLen: number): SubmitPayload | null {
   if (typeof p?.typed !== "string" || !Array.isArray(p.events) || typeof p.durationMs !== "number") return null;
   if (!Number.isFinite(p.durationMs) || p.durationMs <= 0 || p.durationMs > 60 * 60 * 1000) return null;
-  return { typed: p.typed.slice(0, maxLen), events: p.events.slice(0, 20000), durationMs: Math.round(p.durationMs) };
+  return { typed: normalizeTyped(p.typed).slice(0, maxLen), events: p.events.slice(0, 20000), durationMs: Math.round(p.durationMs) };
 }

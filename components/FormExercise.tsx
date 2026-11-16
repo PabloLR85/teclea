@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { findForm, type FormAnswers } from "@/lib/forms";
-import type { InputEvent } from "@/lib/scoring";
+import { findForm, validateExact, validateFormat, type FormAnswers, type FormRejection } from "@/lib/forms";
+import { normalizeTyped, sameText, type InputEvent } from "@/lib/scoring";
 import type { SubmitResult } from "@/lib/attempts";
 import { FormReview } from "./FormReview";
 
-export type FormPayload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number };
+export type FormPayload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number; rejections: FormRejection[] };
 
 type Props = {
   formId: string;
@@ -39,6 +39,10 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
   const events = useRef<InputEvent[]>([]);
   const finishedRef = useRef(false);
   const firstInput = useRef<HTMLInputElement>(null);
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const rejections = useRef<FormRejection[]>([]);
+  // Mensajes de validacion por campo del registro en curso
+  const [fieldMsgs, setFieldMsgs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (result) return;
@@ -60,7 +64,15 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
     setSending(true);
     const durationMs = startedAt ? Date.now() - startedAt : 1000;
     try {
-      setResult(await onSubmit({ answers: finalAnswers, submitted, events: events.current, durationMs: limitMs ? Math.min(durationMs, limitMs) : durationMs }));
+      setResult(
+        await onSubmit({
+          answers: finalAnswers,
+          submitted,
+          events: events.current,
+          durationMs: limitMs ? Math.min(durationMs, limitMs) : durationMs,
+          rejections: rejections.current,
+        }),
+      );
     } catch {
       setResult({ ok: false, error: "No se pudo guardar el resultado. Revisa la conexión y avisa al profesor." });
     } finally {
@@ -80,7 +92,12 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
       start = Date.now();
       setStartedAt(start);
     }
-    const next = answers.map((a, i) => (i === current ? { ...a, [key]: value.slice(0, 200) } : a));
+    if (fieldMsgs[key]) {
+      const rest = { ...fieldMsgs };
+      delete rest[key];
+      setFieldMsgs(rest);
+    }
+    const next = answers.map((a, i) => (i === current ? { ...a, [key]: normalizeTyped(value).slice(0, 200) } : a));
     const n = next.reduce((sum, a) => sum + Object.values(a).reduce((s, v) => s + v.length, 0), 0);
     events.current.push({ t: Date.now() - start, n });
     setAnswers(next);
@@ -89,13 +106,38 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
   function saveRecord(e: React.FormEvent) {
     e.preventDefault();
     if (finishedRef.current) return;
+    // Control de grabacion: practica exige el dato exacto; prueba, campos completos y con formato valido.
+    const values = answers[current] ?? {};
+    const expected = t.records[current];
+    const msgs: Record<string, string> = {};
+    let contentWrong = false;
+    for (const f of t.fields) {
+      const v = values[f.key] ?? "";
+      const m = mode === "practica" ? validateExact(f, v, expected[f.key]) : validateFormat(f, v);
+      if (m) {
+        msgs[f.key] = m;
+        if (v.trim() && !sameText(v.trim(), expected[f.key])) contentWrong = true;
+      }
+    }
+    if (Object.keys(msgs).length > 0) {
+      if (mode === "practica" && contentWrong) rejections.current.push({ record: current, values: { ...values } });
+      setFieldMsgs(msgs);
+      const first = t.fields.find((f) => msgs[f.key]);
+      if (first) inputs.current[first.key]?.focus();
+      return;
+    }
+    setFieldMsgs({});
+    // Al grabar se quitan los espacios sobrantes, como haria el programa de la empresa
+    const trimmed = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()]));
+    const saved = answers.map((a, i) => (i === current ? trimmed : a));
+    setAnswers(saved);
     const submitted = current + 1;
     if (submitted >= total) {
       setCurrent(submitted);
-      void finish(answers, submitted);
+      void finish(saved, submitted);
       return;
     }
-    setAnswers([...answers, empty()]);
+    setAnswers([...saved, empty()]);
     setCurrent(submitted);
   }
 
@@ -158,7 +200,12 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
                   </label>
                   <input
                     id={`f-${f.key}`}
-                    ref={i === 0 ? firstInput : undefined}
+                    ref={(el) => {
+                      inputs.current[f.key] = el;
+                      if (i === 0) firstInput.current = el;
+                    }}
+                    aria-invalid={fieldMsgs[f.key] ? true : undefined}
+                    aria-describedby={fieldMsgs[f.key] ? `m-${f.key}` : undefined}
                     value={answers[current]?.[f.key] ?? ""}
                     onChange={(e) => onField(f.key, e.target.value)}
                     onPaste={block}
@@ -168,15 +215,33 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
                     autoCapitalize="off"
                     spellCheck={false}
                     inputMode={f.numeric ? "decimal" : "text"}
-                    className="h-11 w-full rounded-[10px] border border-line-strong bg-[#FCFCFD] px-3 font-mono text-[15px] text-ink"
+                    className={`h-11 w-full rounded-[10px] border px-3 font-mono text-[15px] text-ink ${
+                      fieldMsgs[f.key] ? "border-2 border-error bg-error-soft/40" : "border-line-strong bg-[#FCFCFD]"
+                    }`}
                   />
+                  {fieldMsgs[f.key] && (
+                    <span id={`m-${f.key}`} className="text-[12px] font-medium text-error-ink">
+                      {fieldMsgs[f.key]}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
+            {Object.keys(fieldMsgs).length > 0 && (
+              <p role="alert" className="m-0 rounded-[10px] bg-error-soft px-3.5 py-2.5 text-sm text-error-ink">
+                No se puede grabar: revisa {Object.keys(fieldMsgs).length === 1 ? "el campo marcado" : `los ${Object.keys(fieldMsgs).length} campos marcados`}.
+                {mode === "practica" && " Cada intento con datos mal escritos suma errores."}
+              </p>
+            )}
             <button type="submit" className="btn btn-primary self-start">
               {current + 1 >= total ? "Grabar y terminar" : "Grabar registro"}
             </button>
-            <span className="text-[13px] text-soft">Pulsa Intro en cualquier campo para grabar el registro y pasar al siguiente.</span>
+            <span className="text-[13px] text-soft">
+              Pulsa Intro para grabar el registro.{" "}
+              {mode === "practica"
+                ? "Solo se graba si todos los campos están completos y coinciden con el documento."
+                : "Solo se graba si todos los campos están completos y con el formato correcto."}
+            </span>
           </form>
         </div>
       )}
@@ -220,7 +285,7 @@ export function FormExercise({ formId, recordLimit, mode, limitMs, onSubmit, bac
       {result && result.ok && mode === "practica" && (
         <section className="card flex flex-col gap-4 p-6">
           <h2 className="h2 m-0">Corrección</h2>
-          <FormReview formId={formId} answers={answers} submitted={Math.min(current, total)} recordLimit={total} />
+          <FormReview formId={formId} answers={answers} submitted={Math.min(current, total)} recordLimit={total} rejections={rejections.current} />
         </section>
       )}
     </div>

@@ -3,18 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { db, type TestRow } from "@/lib/db";
 import { requireStudent } from "@/lib/session";
-import { checkEvents, evaluate, normalizeBaremo, type InputEvent } from "@/lib/scoring";
+import { checkEvents, evaluate, normalizeBaremo, normalizeTyped, type InputEvent } from "@/lib/scoring";
 import { insertAttempt, type SubmitResult } from "@/lib/attempts";
-import { findForm, PRACTICE_RECORDS, scoreForm, type FormAnswers, type FormTemplate, type StoredForm } from "@/lib/forms";
+import { findForm, PRACTICE_RECORDS, rejectionErrors, scoreForm, type FormAnswers, type FormRejection, type FormTemplate, type StoredForm } from "@/lib/forms";
 
-type Payload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number };
+type Payload = { answers: FormAnswers; submitted: number; events: InputEvent[]; durationMs: number; rejections?: FormRejection[] };
 
 function clean(p: Payload, t: FormTemplate, limit: number): Payload | null {
   if (!p || !Array.isArray(p.answers) || !Array.isArray(p.events) || typeof p.durationMs !== "number") return null;
   if (!Number.isFinite(p.durationMs) || p.durationMs <= 0 || p.durationMs > 60 * 60 * 1000) return null;
-  const answers = p.answers.slice(0, limit).map((a) => Object.fromEntries(t.fields.map((f) => [f.key, String(a?.[f.key] ?? "").slice(0, 200)])));
+  const answers = p.answers
+    .slice(0, limit)
+    .map((a) => Object.fromEntries(t.fields.map((f) => [f.key, normalizeTyped(String(a?.[f.key] ?? "")).slice(0, 200)])));
   const submitted = Math.max(0, Math.min(limit, Math.floor(Number(p.submitted) || 0), answers.length));
-  return { answers, submitted, events: p.events.slice(0, 20000), durationMs: Math.round(p.durationMs) };
+  const rejections = (Array.isArray(p.rejections) ? p.rejections : []).slice(0, 300).map((r) => ({
+    record: Math.max(0, Math.min(limit - 1, Math.floor(Number(r?.record) || 0))),
+    values: Object.fromEntries(t.fields.map((f) => [f.key, normalizeTyped(String(r?.values?.[f.key] ?? "")).slice(0, 200)])),
+  }));
+  return { answers, submitted, events: p.events.slice(0, 20000), durationMs: Math.round(p.durationMs), rejections };
 }
 
 function typedLength(answers: FormAnswers) {
@@ -29,10 +35,12 @@ export async function submitFormPractice(formId: string, payload: Payload): Prom
   if (!p) return { ok: false, error: "Datos del ejercicio no válidos." };
 
   const baremo = normalizeBaremo(klass.baremo);
-  const s = scoreForm(t, p.answers, p.submitted, PRACTICE_RECORDS);
+  const base = scoreForm(t, p.answers, p.submitted, PRACTICE_RECORDS);
+  // En practica el registro solo se graba exacto, asi que los errores son los de los intentos rechazados.
+  const s = { chars: base.chars, errors: base.errors + rejectionErrors(t, p.rejections ?? []) };
   const flagged = checkEvents(p.events, typedLength(p.answers), p.durationMs);
   const e = evaluate({ chars: s.chars, errors: s.errors, duration_ms: p.durationMs }, baremo);
-  const stored: StoredForm = { form: t.id, answers: p.answers, submitted: p.submitted };
+  const stored: StoredForm = { form: t.id, answers: p.answers, submitted: p.submitted, rejections: p.rejections };
   const error = await insertAttempt({
     student_id: student.id,
     class_id: klass.id,

@@ -103,7 +103,7 @@ export async function submitRace(raceId: string, payload: SubmitPayload): Promis
 export async function createRace(classId: string, _prev: FormState, form: FormData): Promise<FormState> {
   await requireTeacherClass(classId);
   const title = String(form.get("title") ?? "").trim() || "Carrera";
-  const own = String(form.get("content") ?? "").replace(/\r?\n+/g, " ").replace(/\s+/g, " ").trim();
+  const own = String(form.get("content") ?? "").normalize("NFC").replace(/\r?\n+/g, " ").replace(/\s+/g, " ").trim();
   const content = own;
   const durationMin = Number(String(form.get("duration") ?? "").replace(",", "."));
   if (content.length < 50) return { error: "Elige un texto del banco o pega uno de al menos 50 caracteres." };
@@ -145,4 +145,26 @@ export async function teacherRaceState(classId: string, raceId: string): Promise
   const race = await loadRace(raceId, classId);
   if (!race) return { error: "Carrera no encontrada." };
   return raceState(race, normalizeBaremo(klass.baremo), null);
+}
+
+export async function updateRace(classId: string, raceId: string, _prev: FormState, form: FormData): Promise<FormState> {
+  await requireTeacherClass(classId);
+  const race = await loadRace(raceId, classId);
+  if (!race) return { error: "Carrera no encontrada." };
+  const title = String(form.get("title") ?? "").trim();
+  if (!title) return { error: "Pon un título a la carrera." };
+  const update: Record<string, unknown> = { title };
+  // El texto y la duracion solo se pueden cambiar antes de dar la salida
+  if (racePhase(race) === "waiting") {
+    const content = String(form.get("content") ?? "").normalize("NFC").replace(/\r?\n+/g, " ").replace(/\s+/g, " ").trim();
+    const durationMin = Number(String(form.get("duration") ?? "").replace(",", "."));
+    if (content.length < 50) return { error: "El texto debe tener al menos 50 caracteres." };
+    if (!Number.isFinite(durationMin) || durationMin < 0.5 || durationMin > 15) return { error: "La duración debe estar entre 0,5 y 15 minutos." };
+    update.content = content;
+    update.duration_sec = Math.round(durationMin * 60);
+  }
+  const { error } = await db().from("races").update(update).eq("id", raceId).eq("class_id", classId);
+  if (error) return { error: "No se pudieron guardar los cambios." };
+  revalidatePath(`/profesor/clase/${classId}/carrera/${raceId}`);
+  return { ok: racePhase(race) === "waiting" ? "Cambios guardados." : "Título guardado. El texto y la duración ya no se pueden cambiar porque la carrera ha empezado." };
 }
