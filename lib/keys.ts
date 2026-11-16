@@ -38,9 +38,14 @@ export function isNumericText(s: string): boolean {
 }
 
 // Clasifica una pulsacion en un ejercicio de teclado numerico.
+// La tecla decimal del bloque numerico (en algunos sistemas escribe punto y en otros coma)
+export function isNumpadDecimal(key: string, code: string): boolean {
+  return code === "NumpadDecimal" || code === "NumpadComma" || key === "Decimal" || key === "Separator";
+}
+
 export function numpadKey(key: string, code: string): "ok" | "decimal" | "numlock" | "blocked" {
+  if (isNumpadDecimal(key, code)) return "decimal";
   if (code.startsWith("Numpad")) {
-    if (code === "NumpadDecimal" || code === "NumpadComma") return "decimal";
     if (/^Numpad\d$/.test(code) && !/^\d$/.test(key)) return "numlock";
     return "ok";
   }
