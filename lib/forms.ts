@@ -148,7 +148,7 @@ export const FORMS: FormTemplate[] = [
       return { proveedor, cif, numero, fecha, base: eur(base), iva: eur(iva), total: eur(base + iva) };
     }),
     doc: (r) => [
-      r.proveedor.toUpperCase(),
+      r.proveedor,
       `CIF: ${r.cif}`,
       `Factura nº ${r.numero}, fecha de emisión ${r.fecha}`,
       `Base imponible: ${r.base} €`,
@@ -222,9 +222,21 @@ const FORMAT_RULES: Record<FieldFormat, { re: RegExp; msg: string }> = {
   yesno: { re: /^(Sí|No)$/, msg: "Escribe Sí o No, con mayúscula y tilde." },
 };
 
+// Lo que haria el programa de grabacion al guardar el campo: quita espacios sobrantes y,
+// en los importes, completa los decimales (1250 -> 1250,00; 12,5 -> 12,50; 49.90 -> 49,90).
+export function normalizeFieldValue(field: FormField, value: string): string {
+  let v = value.trim();
+  if (field.format === "money") {
+    if (/^\d+\.\d{1,2}$/.test(v)) v = v.replace(".", ",");
+    if (/^\d+$/.test(v)) v = `${v},00`;
+    else if (/^\d+,\d$/.test(v)) v = `${v}0`;
+  }
+  return v;
+}
+
 // Comprueba que el campo esta relleno y con un formato posible (sin mirar si el dato es el correcto).
 export function validateFormat(field: FormField, value: string): string | null {
-  const v = value.trim();
+  const v = normalizeFieldValue(field, value);
   if (!v) return "Campo obligatorio.";
   if (field.format && !FORMAT_RULES[field.format].re.test(v)) return FORMAT_RULES[field.format].msg;
   return null;
@@ -232,7 +244,7 @@ export function validateFormat(field: FormField, value: string): string | null {
 
 // Practica: ademas del formato, el dato tiene que coincidir exactamente con el documento.
 export function validateExact(field: FormField, value: string, expected: string): string | null {
-  return validateFormat(field, value) ?? (sameText(value.trim(), expected) ? null : "No coincide con el documento. Revísalo letra a letra.");
+  return validateFormat(field, value) ?? (sameText(normalizeFieldValue(field, value), expected) ? null : "No coincide con el documento. Revísalo letra a letra.");
 }
 
 // Registros que se usan en la practica (en las pruebas y carreras se usan todos).
@@ -261,11 +273,12 @@ export function scoreForm(t: FormTemplate, answers: FormAnswers, submitted: numb
   const n = Math.min(answers.length, recordLimit, t.records.length);
   for (let r = 0; r < n; r++) {
     for (const f of t.fields) {
-      const typed = String(answers[r]?.[f.key] ?? "").slice(0, 200).trim();
+      const raw = String(answers[r]?.[f.key] ?? "").slice(0, 200).trim();
+      const typed = normalizeFieldValue(f, raw);
       const expected = t.records[r][f.key];
-      if (r < submitted || typed.length > 0) {
+      if (r < submitted || raw.length > 0) {
         const e = fieldErrors(expected, typed);
-        chars += typed.length;
+        chars += raw.length;
         errors += e;
         detail.push({ record: r, key: f.key, expected, typed, errors: e });
       }
@@ -285,8 +298,8 @@ export function rejectionErrors(t: FormTemplate, rejections: FormRejection[]): n
     const rec = t.records[rj.record];
     if (!rec) continue;
     for (const f of t.fields) {
-      const v = String(rj.values?.[f.key] ?? "").slice(0, 200);
-      if (v.trim() && !sameText(v.trim(), rec[f.key])) errors += fieldErrors(rec[f.key], v);
+      const v = normalizeFieldValue(f, String(rj.values?.[f.key] ?? "").slice(0, 200));
+      if (v && !sameText(v, rec[f.key])) errors += fieldErrors(rec[f.key], v);
     }
   }
   return errors;
